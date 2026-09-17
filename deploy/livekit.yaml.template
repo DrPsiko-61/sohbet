@@ -1,0 +1,42 @@
+# LiveKit SFU yapilandirmasi
+#
+# ONEMLI — SURUM SARTI:
+#   advertise_internal_ip ve skip_external_ip_validation ayarlari livekit-server
+#   v1.13.0 ile gelmistir. v1.8.x bu alanlari TANIMAZ; yapilandirma reddedilir.
+#   Bu yuzden docker-compose.yml livekit/livekit-server:v1.13.6 imajini kullanir.
+#
+# {KEYS} yerine install.sh tarafindan uretilen anahtarlar yazilir.
+
+port: 7880
+
+rtc:
+  tcp_port: 7881
+  # Tek UDP portu: tum medya + TURN bu porttan gecer (router'da tek yonlendirme yeter)
+  udp_port: 7882
+  # Genel IP STUN ile ogrenilir ve ICE adayi olarak duyurulur.
+  use_external_ip: true
+  # Ev/yerel agdaki istemciler icin LAN adresi de duyurulur. Router'da NAT dongusu
+  # (hairpin) yoksa yerel cihazlar genel IP'ye ulasamaz; bu ayar olmadan LAN
+  # istemcileri sesli kanala baglanamaz. Dis istemciler genel IP'yi kullanir.
+  advertise_internal_ip: true
+  skip_external_ip_validation: true
+  # Medya icin guvenli olmayan rastgele portlara ihtiyac kalmasin
+  enable_loopback_candidate: false
+
+keys:
+{KEYS}
+
+audio:
+  # Ses icin aktif konusan kisiyi onceliklendir
+  active_level: 35
+  min_percentile: 40
+  update_interval: 200
+
+logging:
+  level: info
+  json: false
+
+room:
+  # Bos oda 2 dakika sonra kapanir: gereksiz kaynak harcamaz
+  empty_timeout: 120
+  max_participants: 20

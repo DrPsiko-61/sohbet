@@ -1,0 +1,19 @@
+{
+  "name": "sohbet-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "@livekit/rtc-node": "^1.0.0",
+    "livekit-client": "^2.22.3",
+    "livekit-server-sdk": "^2.7.0",
+    "ws": "^8.18.0"
+  }
+}

@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" width="100%" height="auto" style="background:#090a10;border-radius:16px;overflow:hidden;">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#08090e"/>
+      <stop offset="50%" stop-color="#0f1220"/>
+      <stop offset="100%" stop-color="#090a12"/>
+    </linearGradient>
+    <linearGradient id="primaryGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#5865f2"/>
+      <stop offset="100%" stop-color="#8a95ff"/>
+    </linearGradient>
+    <linearGradient id="greenGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1db954"/>
+      <stop offset="100%" stop-color="#1ed760"/>
+    </linearGradient>
+    <linearGradient id="cyanGlow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00d2ff"/>
+      <stop offset="100%" stop-color="#3a7bd5"/>
+    </linearGradient>
+    <radialGradient id="ambient1" cx="20%" cy="30%" r="50%">
+      <stop offset="0%" stop-color="#5865f2" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#5865f2" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="ambient2" cx="85%" cy="65%" r="50%">
+      <stop offset="0%" stop-color="#1db954" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#1db954" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="ambient3" cx="50%" cy="90%" r="40%">
+      <stop offset="0%" stop-color="#00d2ff" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#00d2ff" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse">
+      <path d="M 30 0 L 0 0 0 30" fill="none" stroke="#ffffff" stroke-opacity="0.02" stroke-width="1"/>
+    </pattern>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Background Layer -->
+  <rect width="1200" height="360" fill="url(#bgGrad)"/>
+  <rect width="1200" height="360" fill="url(#ambient1)"/>
+  <rect width="1200" height="360" fill="url(#ambient2)"/>
+  <rect width="1200" height="360" fill="url(#ambient3)"/>
+  <rect width="1200" height="360" fill="url(#grid)"/>
+
+  <!-- Subtle Border Stroke -->
+  <rect x="1" y="1" width="1198" height="358" rx="15" fill="none" stroke="#252945" stroke-opacity="0.6" stroke-width="1.5"/>
+
+  <!-- Decorative Wave Lines on the right -->
+  <g opacity="0.35" transform="translate(740, 60)">
+    <path d="M0,80 C80,20 160,140 240,70 C320,0 360,120 420,60" fill="none" stroke="url(#cyanGlow)" stroke-width="3" stroke-linecap="round"/>
+    <path d="M0,105 C70,45 150,160 230,95 C310,25 350,145 420,85" fill="none" stroke="url(#primaryGlow)" stroke-width="2.5" stroke-linecap="round" opacity="0.7"/>
+    <path d="M0,130 C90,80 170,180 250,120 C330,50 370,170 420,110" fill="none" stroke="url(#greenGlow)" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+  </g>
+
+  <!-- Logo Icon Container -->
+  <g transform="translate(80, 62)">
+    <!-- Icon Glow Background -->
+    <rect x="0" y="0" width="80" height="80" rx="22" fill="#5865f2" fill-opacity="0.15" stroke="#5865f2" stroke-opacity="0.4" stroke-width="1.5"/>
+    <rect x="0" y="0" width="80" height="80" rx="22" fill="url(#primaryGlow)" opacity="0.9" filter="url(#shadow)"/>
+    
+    <!-- Speech Bubble + Audio Wave Symbol -->
+    <path d="M24 28 C24 23.5 27.5 20 32 20 L48 20 C52.5 20 56 23.5 56 28 L56 46 C56 50.5 52.5 54 48 54 L36 54 L26 62 L26 51 C24.8 49.6 24 47.9 24 46 Z" fill="#ffffff" fill-opacity="0.2"/>
+    <!-- Dynamic waveform inside icon -->
+    <rect x="30" y="33" width="3.5" height="14" rx="1.75" fill="#ffffff"/>
+    <rect x="36" y="27" width="3.5" height="26" rx="1.75" fill="#ffffff"/>
+    <rect x="42" y="22" width="3.5" height="36" rx="1.75" fill="#ffffff"/>
+    <rect x="48" y="29" width="3.5" height="22" rx="1.75" fill="#ffffff"/>
+    <rect x="54" y="35" width="3.5" height="10" rx="1.75" fill="#ffffff"/>
+
+    <!-- Sparkle / Live Dot -->
+    <circle cx="70" cy="10" r="5" fill="#1ed760" filter="url(#glow)"/>
+  </g>
+
+  <!-- Header Typography -->
+  <g transform="translate(180, 80)">
+    <text font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif" font-size="44" font-weight="900" fill="#ffffff" letter-spacing="1">
+      S O H B E T
+    </text>
+    <rect x="250" y="-28" width="76" height="22" rx="11" fill="#1db954" fill-opacity="0.2" stroke="#1db954" stroke-width="1"/>
+    <text x="288" y="-13" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="11" font-weight="800" fill="#1ed760" text-anchor="middle" letter-spacing="0.5">
+      SELF-HOSTED
+    </text>
+    <text y="32" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif" font-size="16" font-weight="500" fill="#9da7ca">
+      Kendi sunucunda çalışan özel Discord alternatifi — Sesli/Görüntülü Görüşme, Müzik Botu &amp; Bas-Konuş
+    </text>
+  </g>
+
+  <!-- Feature Pill Tags -->
+  <g transform="translate(80, 185)">
+    <!-- Pill 1: WebRTC SFU -->
+    <g transform="translate(0, 0)">
+      <rect width="186" height="38" rx="19" fill="#151928" stroke="#2c3352" stroke-width="1.2"/>
+      <circle cx="20" cy="19" r="6" fill="#5865f2"/>
+      <text x="36" y="24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="13" font-weight="600" fill="#e1e6f5">LiveKit SFU Motoru</text>
+    </g>
+
+    <!-- Pill 2: Music Bot -->
+    <g transform="translate(198, 0)">
+      <rect width="232" height="38" rx="19" fill="#12231c" stroke="#1db954" stroke-opacity="0.5" stroke-width="1.2"/>
+      <circle cx="20" cy="19" r="6" fill="#1ed760"/>
+      <text x="36" y="24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="13" font-weight="600" fill="#baf0cf">YouTube &amp; Spotify Botu</text>
+    </g>
+
+    <!-- Pill 3: VAD + Deafen -->
+    <g transform="translate(442, 0)">
+      <rect width="216" height="38" rx="19" fill="#151928" stroke="#2c3352" stroke-width="1.2"/>
+      <circle cx="20" cy="19" r="6" fill="#00d2ff"/>
+      <text x="36" y="24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="13" font-weight="600" fill="#e1e6f5">Sağırlaştır &amp; Alt+Tab VAD</text>
+    </g>
+
+    <!-- Pill 4: Single Command -->
+    <g transform="translate(670, 0)">
+      <rect width="194" height="38" rx="19" fill="#1c1626" stroke="#9958f2" stroke-opacity="0.5" stroke-width="1.2"/>
+      <circle cx="20" cy="19" r="6" fill="#b36ffb"/>
+      <text x="36" y="24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="13" font-weight="600" fill="#ecd8ff">Tek Komutla Kurulum</text>
+    </g>
+
+    <!-- Pill 5: Zero Bloat -->
+    <g transform="translate(876, 0)">
+      <rect width="160" height="38" rx="19" fill="#151928" stroke="#2c3352" stroke-width="1.2"/>
+      <circle cx="20" cy="19" r="6" fill="#ffb84d"/>
+      <text x="36" y="24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="13" font-weight="600" fill="#e1e6f5">Hafif SQLite + PWA</text>
+    </g>
+  </g>
+
+  <!-- Quick Terminal Bar at Bottom -->
+  <g transform="translate(80, 252)">
+    <rect width="1040" height="54" rx="12" fill="#06070a" stroke="#1f2337" stroke-width="1.5"/>
+    <!-- Terminal dots -->
+    <circle cx="26" cy="27" r="5" fill="#ff5f56"/>
+    <circle cx="42" cy="27" r="5" fill="#ffbd2e"/>
+    <circle cx="58" cy="27" r="5" fill="#27c93f"/>
+    <!-- Prompt -->
+    <text x="85" y="33" font-family="'Fira Code', 'JetBrains Mono', Consolas, monospace" font-size="14" font-weight="600" fill="#7582a8">$</text>
+    <text x="105" y="33" font-family="'Fira Code', 'JetBrains Mono', Consolas, monospace" font-size="14" font-weight="600" fill="#e1e6f5">
+      git clone https://github.com/DrPsiko-61/sohbet.git &amp;&amp; cd sohbet &amp;&amp; <tspan fill="#00d2ff">sudo bash install.sh</tspan>
+    </text>
+    <rect x="940" y="12" width="84" height="30" rx="7" fill="#5865f2" fill-opacity="0.25" stroke="#5865f2" stroke-width="1"/>
+    <text x="982" y="31" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="11" font-weight="700" fill="#9da7ca" text-anchor="middle">
+      READY ⚡
+    </text>
+  </g>
+</svg>

@@ -1,0 +1,43 @@
+# LiveKit SFU (Selective Forwarding Unit) — sesli/görüntülü görüşme motoru.
+#
+# Kullanim:
+#   docker compose up -d
+#
+# Gerekli dosya: ./livekit.yaml  (install.sh bu dosyayi anahtarlarla uretir)
+#
+# GEREKLI PORTLAR (host agi kullanilir):
+#   7880/tcp  sinyallesme (HTTP/WebSocket)
+#   7881/tcp  medya (TCP yedek yolu)
+#   7882/udp  medya (asil yol; router'da bu portu yonlendirmek yeterli)
+
+services:
+  livekit:
+    image: livekit/livekit-server:v1.13.6
+    container_name: sohbet-livekit
+    command: ["--config", "/etc/livekit/livekit.yaml"]
+    network_mode: host
+    restart: always
+    volumes:
+      - ./livekit.yaml:/etc/livekit/livekit.yaml:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # HTTPS ve ters vekil (reverse proxy). Alan adi yoksa bu servisi kaldirin
+  # (install.sh DOMAIN bos verilirse caddy'yi hic baslatmaz).
+  caddy:
+    image: caddy:2-alpine
+    container_name: sohbet-caddy
+    network_mode: host
+    restart: always
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy_data:/data
+      - ./caddy_config:/config
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

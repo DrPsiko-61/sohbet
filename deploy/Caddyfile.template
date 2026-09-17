@@ -1,0 +1,19 @@
+# Caddy ters vekil (reverse proxy) sablonu — HTTPS ve tek alan adi uzerinden
+# hem uygulama hem LiveKit sinyallesmesi sunulur.
+#
+# install.sh, DOMAIN degiskeni verildiginde bu dosyayi uretir:
+#   {DOMAIN} -> gercek alan adi (or. sohbet.ornek.com)
+#   {PORT}   -> Node uygulamasinin portu (or. 3300)
+#
+# Yerel agdaki cihazlar icin /livekit yolu 127.0.0.1:7880'e yonlendirilir;
+# boylece NAT dongusu olmayan router'larda da yerel istemciler baglanabilir.
+
+{DOMAIN} {
+	encode gzip
+
+	# LiveKit sinyallesmesi (WebSocket)
+	reverse_proxy /livekit* 127.0.0.1:7880
+
+	# Uygulama
+	reverse_proxy 127.0.0.1:{PORT}
+}

@@ -1,0 +1,23 @@
+# Veri ve sir dosyalari
+data/
+deploy/.env
+deploy/livekit.yaml
+deploy/Caddyfile
+deploy/caddy_data/
+deploy/caddy_config/
+
+# Bagimliliklar
+node_modules/
+
+# Gunlukler ve gecici dosyalar
+*.log
+*.tmp
+
+# Isletim sistemi
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editör
+.vscode/
+.idea/
