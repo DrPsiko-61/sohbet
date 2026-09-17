@@ -65,18 +65,21 @@ export function purgeExpiredSessions() {
 
 export function publicUser(u) {
   if (!u) return null
+  const isBot = u.username === 'muzik-botu' || u.role === 'bot'
   return {
     id: u.id,
     username: u.username,
     displayName: u.display_name,
     avatarColor: u.avatar_color,
-    role: u.role
+    avatarUrl: u.avatar_url || null,
+    role: isBot ? 'bot' : u.role,
+    isBot
   }
 }
 
-export const ROLES = { OWNER: 'owner', ADMIN: 'admin', MOD: 'mod', MEMBER: 'member', GUEST: 'guest' }
+export const ROLES = { OWNER: 'owner', ADMIN: 'admin', MOD: 'mod', MEMBER: 'member', GUEST: 'guest', BOT: 'bot' }
 
-const RANK = { owner: 4, admin: 3, mod: 2, member: 1, guest: 0 }
+const RANK = { owner: 4, admin: 3, mod: 2, member: 1, guest: 0, bot: 1 }
 
 export function rank(role) {
   return RANK[role] ?? 0

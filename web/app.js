@@ -98,9 +98,30 @@ function initials(name) {
 function avatarNode(user, size = '') {
   const node = el('span', `avatar ${size}`.trim());
   const name = user?.displayName || user?.name || '?';
-  node.style.background = user?.avatarColor || user?.avatar_color || '#5865f2';
-  node.textContent = initials(name);
+  const url = user?.avatarUrl || user?.avatar_url;
+  if (url) {
+    node.style.backgroundImage = `url("${url}")`;
+    node.textContent = '';
+  } else {
+    node.style.backgroundImage = '';
+    node.style.background = user?.avatarColor || user?.avatar_color || '#5865f2';
+    node.textContent = initials(name);
+  }
   return node;
+}
+
+function roleTagNode(role, isBot) {
+  const r = (isBot || role === 'bot') ? 'bot' : role;
+  if (!r || r === 'member' || r === 'guest') return null;
+  const tag = el('span', `role-tag role-${r}`);
+  const labels = {
+    owner: 'KURUCU',
+    admin: 'YÖNETİCİ',
+    mod: 'MOD',
+    bot: 'BOT'
+  };
+  tag.textContent = labels[r] || r.toUpperCase();
+  return tag;
 }
 
 function fmtTime(ts) {
@@ -246,6 +267,7 @@ async function startApp() {
   renderMe();
   renderServers();
   renderChannels();
+  renderMembersSide();
 
   const first = currentChannels().find((c) => c.type === 'text');
   if (first) await openChannel(first.id);
@@ -352,6 +374,28 @@ function renderChannels() {
         await joinVoice(channel);
       });
       wrap.append(button);
+      if (channel.type === 'voice') {
+        const users = state.voice[channel.id] || [];
+        if (users.length) {
+          const vUsersWrap = el('div', 'chan-voice-users');
+          for (const u of users) {
+            const userObj = state.users.get(u.userId) || { displayName: 'Bilinmeyen', avatarColor: '#5865f2' };
+            const uRow = el('div', 'chan-vuser');
+            uRow.append(avatarNode(userObj, 'xs'));
+            uRow.append(el('span', 'chan-vname', userObj.displayName));
+            const tag = roleTagNode(userObj.role, userObj.isBot || userObj.username === 'muzik-botu');
+            if (tag) uRow.append(tag);
+            uRow.addEventListener('click', (e) => {
+              e.stopPropagation();
+              if (voice.channelId && Number(voice.channelId) === Number(channel.id) && u.userId !== state.me.id) {
+                openAudioSheet(u.userId);
+              }
+            });
+            vUsersWrap.append(uRow);
+          }
+          wrap.append(vUsersWrap);
+        }
+      }
     }
     list.append(wrap);
   }
@@ -371,6 +415,7 @@ async function openChannel(channelId) {
   list.innerHTML = '';
   list.classList.remove('empty');
   renderChannels();
+  renderMembersSide();
   await loadMessages();
   chatSideKanalDoldur();
 }
@@ -428,6 +473,8 @@ function messageNode(message, grouped) {
     const head = el('div', 'msg-head');
     const name = el('strong', null, author?.displayName || 'Bilinmeyen');
     head.append(name);
+    const tag = roleTagNode(author?.role, author?.isBot || author?.username === 'muzik-botu');
+    if (tag) head.append(tag);
     const time = el('time', null, fmtTime(message.createdAt));
     time.dateTime = new Date(message.createdAt).toISOString();
     head.append(time);
@@ -921,6 +968,7 @@ function handleSocket(msg) {
     case 'presence': {
       if (msg.online) state.online.add(msg.userId);
       else state.online.delete(msg.userId);
+      renderMembersSide();
       break;
     }
     case 'voice_state': {
@@ -931,6 +979,7 @@ function handleSocket(msg) {
       if (!msg.users?.length) delete state.voice[msg.channelId];
       renderChannels();
       renderVoice();
+      renderMembersSide();
       // Başka biri odaya girip çıkınca minik uyarı sesi çal (kendi katılımında değil ve yalnızca odadakilere).
       if ((yeniGiren.length || cikanlar.length) && voice.channelId && Number(voice.channelId) === Number(msg.channelId)) {
         minikSesCal();
@@ -940,7 +989,11 @@ function handleSocket(msg) {
     case 'user_create':
     case 'user_update': {
       if (msg.payload) state.users.set(msg.payload.id, { ...state.users.get(msg.payload.id), ...msg.payload });
+      if (msg.payload?.id === state.me?.id) {
+        state.me = { ...state.me, ...msg.payload };
+      }
       renderMe();
+      renderMembersSide();
       break;
     }
     case 'user_delete':
@@ -968,6 +1021,7 @@ async function refreshBootstrap() {
     renderServers();
     renderChannels();
     renderVoice();
+    renderMembersSide();
     if (state.channel) {
       const still = currentChannels().find((c) => c.id === state.channel.id);
       if (still) {
@@ -1131,6 +1185,7 @@ function renderVoice() {
     voiceDom.tiles.clear();
     voiceDom.maximized = null;
     filmModuKapat();
+    renderMembersSide();
     return;
   }
 
@@ -1142,6 +1197,7 @@ function renderVoice() {
 
   renderPeerChips(participants, activeSpeakers);
   renderSidePeople(participants, activeSpeakers);
+  renderMembersSide();
   renderStage(participants);
   applySavedVolumes(participants);
   videoTasarrufuUygula();
@@ -1228,7 +1284,7 @@ function renderPeerChips(participants, activeSpeakers) {
       voiceDom.peers.set(id, chip);
     }
 
-    const avatarKey = `${user.avatarColor || ''}|${user.displayName || ''}`;
+    const avatarKey = `${user.avatarColor || ''}|${user.displayName || ''}|${user.avatarUrl || user.avatar_url || ''}`;
     if (chip.dataset.avatar !== avatarKey) {
       chip.dataset.avatar = avatarKey;
       chip.querySelector('.avatar').replaceWith(avatarNode(user, 'sm'));
@@ -1293,6 +1349,135 @@ function renderSidePeople(participants, activeSpeakers) {
   }
   for (const [id, row] of voiceDom.rows) {
     if (!seen.has(id)) { row.remove(); voiceDom.rows.delete(id); }
+  }
+}
+
+/// Sağ taraftaki üye paneli (Discord stili).
+function renderMembersSide() {
+  const mList = $('members-list');
+  const mTitle = $('members-title');
+  if (!mList) return;
+  mList.innerHTML = '';
+
+  const activeChannel = state.channel;
+  const voiceChannelId = voice.channelId ? Number(voice.channelId) : null;
+
+  let voiceUsers = [];
+  if (voiceChannelId && state.voice[voiceChannelId]) {
+    voiceUsers = state.voice[voiceChannelId];
+  } else if (activeChannel?.type === 'voice' && state.voice[activeChannel.id]) {
+    voiceUsers = state.voice[activeChannel.id];
+  }
+
+  const activeSpeakers = new Set((voice.activeSpeakers || []).map(String));
+
+  if (voiceUsers.length > 0) {
+    if (mTitle) mTitle.textContent = `Üyeler — ${voiceUsers.length}`;
+    const vGroup = el('div', 'members-group-title', 'Sesli Oda');
+    mList.append(vGroup);
+
+    for (const p of voiceUsers) {
+      const user = state.users.get(p.userId) || { displayName: 'Bilinmeyen', avatarColor: '#5865f2' };
+      const isSelf = p.userId === state.me.id;
+      const isSpeaking = activeSpeakers.has(String(p.userId));
+      const isBot = Boolean(user.isBot || user.username === 'muzik-botu');
+
+      const item = el('div', 'member-item' + (isSpeaking ? ' speaking' : ''));
+      const wrap = el('div', 'avatar-wrap');
+      wrap.append(avatarNode(user, 'sm'));
+      const dot = el('span', 'status-dot online');
+      wrap.append(dot);
+      item.append(wrap);
+
+      const minfo = el('div', 'minfo');
+      const mhead = el('div', 'mhead');
+      const mname = el('span', 'mname', user.displayName + (isSelf ? ' (Sen)' : ''));
+      mhead.append(mname);
+      const tag = roleTagNode(user.role, isBot);
+      if (tag) mhead.append(tag);
+      minfo.append(mhead);
+
+      let subText = 'Çevrimiçi';
+      let subClass = 'msub';
+      if (isBot) {
+        subText = 'Müzik çalıyor 🎵';
+        subClass = 'msub music';
+      } else if (isSpeaking) {
+        subText = 'Konuşuyor...';
+        subClass = 'msub speaking';
+      } else if (!p.mic) {
+        subText = 'Mikrofon kapalı';
+      }
+      const msub = el('span', subClass, subText);
+      minfo.append(msub);
+      item.append(minfo);
+
+      if (!isSelf) {
+        item.addEventListener('click', () => openAudioSheet(p.userId));
+        item.title = 'Ses seviyesini ayarla';
+      }
+      mList.append(item);
+    }
+  } else {
+    const srv = currentServer();
+    const members = srv?.members || [];
+    const count = members.length || state.users.size;
+    if (mTitle) mTitle.textContent = `Üyeler — ${count}`;
+
+    const online = [];
+    const offline = [];
+
+    const memberList = members.length ? members : Array.from(state.users.values()).map((u) => ({ userId: u.id, ...u }));
+    for (const m of memberList) {
+      const u = state.users.get(m.userId) || m;
+      const isOnline = state.online.has(u.id);
+      if (isOnline) online.push(u);
+      else offline.push(u);
+    }
+
+    if (online.length) {
+      mList.append(el('div', 'members-group-title', `Çevrimiçi — ${online.length}`));
+      for (const u of online) {
+        const item = el('div', 'member-item');
+        const wrap = el('div', 'avatar-wrap');
+        wrap.append(avatarNode(u, 'sm'));
+        wrap.append(el('span', 'status-dot online'));
+        item.append(wrap);
+
+        const minfo = el('div', 'minfo');
+        const mhead = el('div', 'mhead');
+        mhead.append(el('span', 'mname', u.displayName + (u.id === state.me.id ? ' (Sen)' : '')));
+        const isBot = Boolean(u.isBot || u.username === 'muzik-botu');
+        const tag = roleTagNode(u.role, isBot);
+        if (tag) mhead.append(tag);
+        minfo.append(mhead);
+        minfo.append(el('span', 'msub' + (isBot ? ' music' : ''), isBot ? 'Müzik Botu' : 'Çevrimiçi'));
+        item.append(minfo);
+        mList.append(item);
+      }
+    }
+
+    if (offline.length) {
+      mList.append(el('div', 'members-group-title', `Çevrimdışı — ${offline.length}`));
+      for (const u of offline) {
+        const item = el('div', 'member-item');
+        const wrap = el('div', 'avatar-wrap');
+        wrap.append(avatarNode(u, 'sm'));
+        wrap.append(el('span', 'status-dot offline'));
+        item.append(wrap);
+
+        const minfo = el('div', 'minfo');
+        const mhead = el('div', 'mhead');
+        mhead.append(el('span', 'mname', u.displayName));
+        const isBot = Boolean(u.isBot || u.username === 'muzik-botu');
+        const tag = roleTagNode(u.role, isBot);
+        if (tag) mhead.append(tag);
+        minfo.append(mhead);
+        minfo.append(el('span', 'msub', 'Çevrimdışı'));
+        item.append(minfo);
+        mList.append(item);
+      }
+    }
   }
 }
 
@@ -1530,11 +1715,8 @@ function vadEsikAdi(hassasiyet) {
 function renderPttSelect() {
   const wrap = $('vs-ptt');
   if (!wrap) return;
-  if (!voice.room || !masaustu) {
-    wrap.hidden = true;
-    return;
-  }
-  wrap.hidden = false;
+  wrap.hidden = (currentVoiceTab !== 'ptt');
+  if (!voice.room || !masaustu) return;
   fillSelect(
     $('sel-konusma-mod'),
     [
@@ -1689,8 +1871,7 @@ $('btn-card').addEventListener('click', async () => {
     const side = $('voice-side');
     side.hidden = false;
     side.classList.add('open');
-    const vsCard = $('vs-card');
-    if (vsCard) vsCard.hidden = false;
+    setVoiceTab('card');
     toast('Capture card bulunamadı veya bağlı değil');
     return;
   }
@@ -1837,8 +2018,29 @@ function fillSelect(select, items, selected, emptyLabel) {
   select.value = items.some((item) => item.id === current) ? current : items[0].id;
 }
 
+let currentVoiceTab = 'devices';
+
+function setVoiceTab(tab) {
+  currentVoiceTab = tab;
+  document.querySelectorAll('#vsettings-tabs .vtab').forEach((b) => {
+    b.classList.toggle('active', b.dataset.tab === tab);
+  });
+  const map = {
+    devices: 'vs-devices',
+    ptt: 'vs-ptt',
+    camera: 'vs-camera',
+    share: 'vs-share',
+    card: 'vs-card'
+  };
+  for (const [t, id] of Object.entries(map)) {
+    const elTab = $(id);
+    if (elTab) elTab.hidden = (t !== currentVoiceTab);
+  }
+}
+
 function renderDeviceSelects() {
-  $('vs-devices').hidden = !(voice.room && voiceDom.devicesReady);
+  const wrap = $('vs-devices');
+  if (wrap) wrap.hidden = (currentVoiceTab !== 'devices');
 }
 
 /// Kamera ayarlari (kalite). Secim kamerayi acarken ve acikken canli uygulanir.
@@ -1846,11 +2048,8 @@ function renderCameraSelects() {
   const wrap = $('vs-camera');
   const mod = voice.mod;
   if (!wrap) return;
-  if (!voice.room || !mod?.getCameraSettings) {
-    wrap.hidden = true;
-    return;
-  }
-  wrap.hidden = false;
+  wrap.hidden = (currentVoiceTab !== 'camera');
+  if (!voice.room || !mod?.getCameraSettings) return;
   const settings = mod.getCameraSettings();
   fillSelect(
     $('sel-cam-quality'),
@@ -1877,11 +2076,8 @@ function renderShareSelects() {
   const wrap = $('vs-share');
   const mod = voice.mod;
   if (!wrap) return;
-  if (!voice.room || !mod?.getShareSettings) {
-    wrap.hidden = true;
-    return;
-  }
-  wrap.hidden = false;
+  wrap.hidden = (currentVoiceTab !== 'share');
+  if (!voice.room || !mod?.getShareSettings) return;
   const settings = mod.getShareSettings();
   fillSelect(
     $('sel-share-quality'),
@@ -1952,11 +2148,8 @@ function renderCardSelects() {
   const wrap = $('vs-card');
   const mod = voice.mod;
   if (!wrap) return;
-  if (!voice.room || !mod?.getCardSettings) {
-    wrap.hidden = true;
-    return;
-  }
-  wrap.hidden = false;
+  wrap.hidden = (currentVoiceTab !== 'card');
+  if (!voice.room || !mod?.getCardSettings) return;
   const settings = mod.getCardSettings();
   // Kart listesi: yalnizca gercekten capture card olan video aygitlari.
   const kartlar = cardDevices.filter((c) => /capture|hdmi|usb|elgato|aver|magewell|blackmagic|intensity|gamer|game/i.test(c.label));
@@ -2164,10 +2357,33 @@ $('cside-input').addEventListener('input', () => {
 $('btn-vs-side').addEventListener('click', () => {
   const panel = $('voice-side');
   panel.hidden = !panel.hidden;
-  if (!panel.hidden) renderPttSelect();
+  if (!panel.hidden) {
+    setVoiceTab(currentVoiceTab);
+    renderPttSelect();
+  }
 });
 $('btn-close-vside').addEventListener('click', () => {
   $('voice-side').hidden = true;
+});
+
+document.querySelectorAll('#vsettings-tabs .vtab').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    setVoiceTab(btn.dataset.tab);
+    if (btn.dataset.tab === 'ptt') renderPttSelect();
+    else if (btn.dataset.tab === 'camera') renderCameraSelects();
+    else if (btn.dataset.tab === 'share') renderShareSelects();
+    else if (btn.dataset.tab === 'card') renderCardSelects();
+    else if (btn.dataset.tab === 'devices') renderDeviceSelects();
+  });
+});
+
+$('btn-members-toggle')?.addEventListener('click', () => {
+  const mside = $('members-side');
+  if (mside) mside.hidden = !mside.hidden;
+});
+$('btn-close-mside')?.addEventListener('click', () => {
+  const mside = $('members-side');
+  if (mside) mside.hidden = true;
 });
 
 /* ---------------- sürükle-bırak yeniden boyutlandırma ---------------- */
@@ -2218,10 +2434,30 @@ if (vsKulp && vsSahne) {
 }
 $('sidebar-scrim').addEventListener('click', closeSidebar);
 
+function updateMeAvatarPreview() {
+  const preview = $('me-avatar-preview');
+  if (!preview) return;
+  const me = state.me;
+  const url = me?.avatarUrl || me?.avatar_url;
+  if (url) {
+    preview.style.backgroundImage = `url("${url}")`;
+    preview.textContent = '';
+    const btnRemove = $('btn-remove-avatar');
+    if (btnRemove) btnRemove.hidden = false;
+  } else {
+    preview.style.backgroundImage = '';
+    preview.style.background = me?.avatarColor || me?.avatar_color || '#5865f2';
+    preview.textContent = initials(me?.displayName || '?');
+    const btnRemove = $('btn-remove-avatar');
+    if (btnRemove) btnRemove.hidden = true;
+  }
+}
+
 $('btn-me').addEventListener('click', () => {
   $('me-display').value = state.me.displayName;
   $('me-color').value = state.me.avatarColor || '#5865f2';
   $('me-pass').value = '';
+  updateMeAvatarPreview();
   // Davet kodu sunucudan sadece yonetici/sahip icin gelir; digerlerinde alan gizli kalir.
   const showInvite = Boolean(state.inviteCode);
   $('field-invite-code').hidden = !showInvite;
@@ -2230,6 +2466,85 @@ $('btn-me').addEventListener('click', () => {
   $('screen-me').hidden = false;
 });
 $('btn-me-close').addEventListener('click', () => { $('screen-me').hidden = true; });
+
+$('btn-choose-avatar')?.addEventListener('click', () => {
+  $('in-avatar')?.click();
+});
+
+$('in-avatar')?.addEventListener('change', async () => {
+  const file = $('in-avatar').files?.[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    toast('Lütfen geçerli bir resim dosyası seçin');
+    return;
+  }
+  if (file.size > 4 * 1024 * 1024) {
+    toast('Resim en fazla 4 MB olabilir');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const preview = $('me-avatar-preview');
+    if (preview) {
+      preview.style.backgroundImage = `url("${e.target.result}")`;
+      preview.textContent = '';
+    }
+  };
+  reader.readAsDataURL(file);
+
+  try {
+    toast('Profil resmi yükleniyor...');
+    const buffer = await file.arrayBuffer();
+    const token = localStorage.getItem('sohbet.token');
+    const res = await fetch(`/api/me/avatar?mime=${encodeURIComponent(file.type)}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': file.type
+      },
+      body: buffer
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'upload_failed');
+    state.me = { ...state.me, ...data.user, avatarUrl: data.avatarUrl };
+    state.users.set(state.me.id, { ...state.users.get(state.me.id), ...data.user, avatarUrl: data.avatarUrl });
+    renderMe();
+    renderMembersSide();
+    updateMeAvatarPreview();
+    toast('Profil resmi güncellendi');
+  } catch (err) {
+    toast('Resim yüklenemedi: ' + tr(err.message));
+    updateMeAvatarPreview();
+  }
+});
+
+$('btn-remove-avatar')?.addEventListener('click', async () => {
+  try {
+    const token = localStorage.getItem('sohbet.token');
+    const res = await fetch('/api/me/avatar', {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'remove_failed');
+    state.me = { ...state.me, ...data.user, avatarUrl: null };
+    state.users.set(state.me.id, { ...state.users.get(state.me.id), ...data.user, avatarUrl: null });
+    renderMe();
+    renderMembersSide();
+    updateMeAvatarPreview();
+    toast('Profil resmi kaldırıldı');
+  } catch (err) {
+    toast('Resim kaldırılamadı: ' + tr(err.message));
+  }
+});
+
+$('me-color')?.addEventListener('input', () => {
+  if (!state.me?.avatarUrl) {
+    const preview = $('me-avatar-preview');
+    if (preview) preview.style.background = $('me-color').value;
+  }
+});
+
 $('btn-copy-invite').addEventListener('click', async () => {
   const field = $('me-invite');
   if (!field.value) return;
@@ -2253,6 +2568,7 @@ $('btn-me-save').addEventListener('click', async () => {
     state.me = { ...state.me, ...res.user };
     state.users.set(state.me.id, { ...state.users.get(state.me.id), ...res.user });
     renderMe();
+    renderMembersSide();
     $('me-msg').textContent = 'Kaydedildi';
     $('me-msg').hidden = false;
     $('me-pass').value = '';

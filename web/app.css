@@ -76,8 +76,11 @@ a.btn-link{display:block;text-align:center}
 .me-text small{font-size:11px}
 
 .avatar{width:32px;height:32px;border-radius:50%;flex:none;background:var(--brand);
-  display:grid;place-items:center;font-weight:700;font-size:13px;color:#fff;overflow:hidden}
+  display:grid;place-items:center;font-weight:700;font-size:13px;color:#fff;overflow:hidden;
+  background-size:cover;background-position:center;background-repeat:no-repeat}
 .avatar.sm{width:26px;height:26px;font-size:11px}
+.avatar.xs{width:20px;height:20px;font-size:10px}
+.avatar.lg{width:64px;height:64px;font-size:24px}
 
 /* ---------- sohbet ---------- */
 .chat{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg)}
@@ -132,13 +135,61 @@ a.btn-link{display:block;text-align:center}
 .attach-chip{display:flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--line);border-radius:8px;padding:4px 8px;font-size:12px}
 .attach-chip button{color:var(--danger);font-weight:700}
 
-/* ---------- sesli ---------- */
+/* ---------- rol etiketleri ---------- */
+.role-tag{display:inline-flex;align-items:center;font-size:10px;font-weight:700;letter-spacing:.4px;padding:1px 5px;border-radius:4px;text-transform:uppercase;line-height:1.2;vertical-align:middle;margin-left:6px;flex:none}
+.role-tag.role-owner{background:rgba(88,101,242,.2);color:#8ea6ff;border:1px solid rgba(88,101,242,.5)}
+.role-tag.role-admin{background:rgba(237,66,69,.2);color:#ed4245;border:1px solid rgba(237,66,69,.5)}
+.role-tag.role-mod{background:rgba(254,231,92,.2);color:#fee75c;border:1px solid rgba(254,231,92,.5)}
+.role-tag.role-bot{background:#57f287;color:#0b2212;font-weight:800;border:none}
+
+/* ---------- sesli & yan paneller ---------- */
 .side-head{display:flex;align-items:center;gap:4px;margin-bottom:10px}
 .side-head h3{margin:0;flex:1;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
 .side-head .icon-btn{width:30px;height:30px}
-.voice-side{width:250px;flex:none;background:var(--bg2);border-left:1px solid var(--line);padding:12px 10px;overflow-y:auto;display:none;flex-direction:column}
+.voice-side{width:270px;flex:none;background:var(--bg2);border-left:1px solid var(--line);padding:12px 10px;overflow-y:auto;display:none;flex-direction:column}
 .voice-side h3{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
 .chat-side{width:280px;flex:none;background:var(--bg2);border-left:1px solid var(--line);padding:12px 10px;overflow-y:auto;display:flex;flex-direction:column}
+
+/* ---------- sekmeli ses ayarları ---------- */
+.vtabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:10px;padding-bottom:6px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.vtab{background:transparent;border:0;color:var(--muted);font-size:12px;font-weight:600;padding:6px 10px;border-radius:6px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.vtab:hover{color:var(--text);background:var(--bg3)}
+.vtab.active{color:#fff;background:var(--brand)}
+.vtab-panels{flex:1;min-height:0;overflow-y:auto}
+.vtab-panels .vs-devices{margin-bottom:0}
+
+/* ---------- üye listesi (Discord sağ panel) ---------- */
+.members-side{width:240px;flex:none;background:var(--bg2);border-left:1px solid var(--line);padding:12px 10px;overflow-y:auto;display:none;flex-direction:column}
+.members-side h3{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+.members-list{display:flex;flex-direction:column;gap:3px;flex:1;overflow-y:auto}
+.members-group-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);padding:8px 6px 3px;margin-top:2px}
+.member-item{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:8px;cursor:pointer;transition:background .15s;user-select:none}
+.member-item:hover{background:var(--bg3)}
+.member-item .avatar-wrap{position:relative;flex:none}
+.member-item.speaking .avatar{box-shadow:0 0 0 2px var(--ok),0 0 10px rgba(87,242,135,.6)}
+.member-item .status-dot{position:absolute;bottom:-1px;right:-1px;width:9px;height:9px;border-radius:50%;border:2px solid var(--bg2)}
+.member-item .status-dot.online{background:var(--ok)}
+.member-item .status-dot.idle{background:var(--warn)}
+.member-item .status-dot.offline{background:var(--muted)}
+.member-item .minfo{flex:1;min-width:0;display:flex;flex-direction:column}
+.member-item .mhead{display:flex;align-items:center;min-width:0}
+.member-item .mname{font-size:13px;font-weight:600;color:inherit;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.member-item .msub{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+.member-item .msub.speaking{color:var(--ok);font-weight:600}
+.member-item .msub.music{color:#57f287;font-weight:600}
+
+/* ---------- ses kanalındaki katılımcılar (sol kenar çubuğu) ---------- */
+.chan-voice-users{display:flex;flex-direction:column;gap:2px;margin:2px 0 6px 16px;padding-left:8px;border-left:2px solid var(--line)}
+.chan-vuser{display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:4px;font-size:12px;color:var(--muted);cursor:pointer}
+.chan-vuser:hover{background:var(--bg3);color:var(--text)}
+.chan-vname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ---------- profil resmi düzenleme ---------- */
+.me-avatar-edit{display:flex;align-items:center;gap:16px;margin-bottom:16px;padding:12px 14px;background:var(--bg3);border-radius:12px;border:1px solid var(--line)}
+.me-avatar-actions{display:flex;flex-direction:column;gap:6px;flex:1}
+.me-avatar-actions .btn-sm{padding:6px 12px;font-size:12px;border-radius:6px;cursor:pointer;border:1px solid var(--line);background:var(--bg4);font-weight:600;color:inherit;align-self:flex-start}
+.me-avatar-actions .btn-sm:hover{background:var(--bg2)}
+.me-avatar-actions .btn-sm.danger{color:var(--danger);border-color:rgba(237,66,69,.4)}
 .chat-side .field{margin-bottom:10px}
 .cside-msgs{flex:1;overflow-y:auto;min-height:0;display:flex;flex-direction:column;gap:8px;padding-right:2px;-webkit-overflow-scrolling:touch}
 .cside-msg{background:var(--bg3);border:1px solid var(--line);border-radius:10px;padding:8px 10px;line-height:1.4}
@@ -300,10 +351,11 @@ body.film-modu .tile.max.fit-cover video{width:100%;height:100%}
 
 @media (max-width:819px){
   /* Sağ yan paneller mobilde tam ekran sayfa gibi açılır; gizli başlar. */
-  .chat-side,.voice-side{position:fixed;inset:0;width:100%;z-index:50;background:var(--bg);border-left:0;padding-top:calc(8px + var(--st))}
+  .chat-side,.voice-side,.members-side{position:fixed;inset:0;width:100%;z-index:50;background:var(--bg);border-left:0;padding-top:calc(8px + var(--st))}
   .chat-side{display:none}
   .voice-side{display:none}
-  .chat-side:not([hidden]),.voice-side:not([hidden]){display:flex}
+  .members-side{display:none}
+  .chat-side:not([hidden]),.voice-side:not([hidden]),.members-side:not([hidden]){display:flex}
   /* Film modunda (telefon yataydayken) panel sağda sabitlenir: 3:1. */
   body.film-modu .chat-side{position:fixed;top:0;right:0;bottom:0;left:auto;width:25vw;z-index:201;padding:8px 10px;background:rgba(15,15,20,.96);border-left:1px solid rgba(255,255,255,.12)}
   body.film-modu .tile.max{right:25vw;width:75vw}
@@ -323,7 +375,8 @@ body.film-modu .tile.max.fit-cover video{width:100%;height:100%}
   .sidebar{position:static;transform:none}
   .scrim{display:none!important}
   .chat-side:not([hidden]){display:flex}
-  .voice-side:not([hidden]){display:block}
+  .voice-side:not([hidden]){display:flex}
+  .members-side:not([hidden]){display:flex}
   .chat-head{min-height:56px;padding:6px 16px}
   .msg-list{padding:16px 20px}
   .composer{padding:10px 16px 12px}

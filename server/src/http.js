@@ -271,7 +271,7 @@ export function buildRoutes({ hub }) {
   add('GET', '/api/bootstrap', auth(async ({ res, user }) => {
     const servers = q.all('SELECT * FROM servers ORDER BY id')
     const members = q.all(
-      `SELECT m.server_id, m.role, m.joined_at, u.id, u.username, u.display_name, u.avatar_color
+      `SELECT m.server_id, m.role, m.joined_at, u.id, u.username, u.display_name, u.avatar_color, u.avatar_url
          FROM members m JOIN users u ON u.id = m.user_id ORDER BY u.display_name`
     )
     const users = q.all('SELECT * FROM users ORDER BY display_name').map((u) => ({
@@ -299,13 +299,18 @@ export function buildRoutes({ hub }) {
           isPrivate: Boolean(c.is_private),
           position: c.position
         })),
-        members: members.filter((m) => m.server_id === s.id).map((m) => ({
-          userId: m.id,
-          role: m.role,
-          username: m.username,
-          displayName: m.display_name,
-          avatarColor: m.avatar_color
-        }))
+        members: members.filter((m) => m.server_id === s.id).map((m) => {
+          const isBot = m.username === 'muzik-botu' || m.role === 'bot'
+          return {
+            userId: m.id,
+            role: isBot ? 'bot' : m.role,
+            username: m.username,
+            displayName: m.display_name,
+            avatarColor: m.avatar_color,
+            avatarUrl: m.avatar_url || null,
+            isBot
+          }
+        })
       })),
       users,
       voice: hub.voiceSnapshot()
@@ -609,6 +614,10 @@ export function buildRoutes({ hub }) {
       const color = String(body.avatarColor)
       if (/^#[0-9a-f]{6}$/i.test(color)) q.insert('UPDATE users SET avatar_color = ? WHERE id = ?', [color, targetId])
     }
+    if (body.avatarUrl !== undefined) {
+      const aUrl = body.avatarUrl ? String(body.avatarUrl) : null
+      q.insert('UPDATE users SET avatar_url = ? WHERE id = ?', [aUrl, targetId])
+    }
     if (body.password !== undefined) {
       if (!selfEdit && !atLeast(user.role, ROLES.ADMIN)) return send(res, 403, { error: 'forbidden' })
       const password = String(body.password)
@@ -653,6 +662,45 @@ export function buildRoutes({ hub }) {
     audit(user.id, 'user.delete', { username: target.username })
     hub.broadcastAll({ op: 'user_delete', payload: { userId: targetId } })
     return send(res, 200, { ok: true })
+  }))
+
+  const handleAvatarUpload = async ({ req, res, user, url }) => {
+    const mime = String(url.searchParams.get('mime') || req.headers['content-type'] || 'image/png').toLowerCase()
+    if (!mime.startsWith('image/')) return send(res, 400, { error: 'invalid_image_type' })
+    let buffer
+    try {
+      buffer = await readRaw(req, 4 * 1024 * 1024)
+    } catch {
+      return send(res, 413, { error: 'file_too_large' })
+    }
+    if (!buffer.length) return send(res, 400, { error: 'empty_file' })
+    const ext = mime.includes('jpeg') ? '.jpg' : mime.includes('webp') ? '.webp' : mime.includes('gif') ? '.gif' : '.png'
+    const filename = `avatar-${user.id}${ext}`
+    const info = q.insert(
+      'INSERT INTO attachments (message_id, filename, mime, size, path) VALUES (NULL, ?, ?, ?, ?)',
+      [filename, mime, buffer.length, 'pending']
+    )
+    const id = Number(info.lastInsertRowid)
+    const filePath = join(FILES_DIR, String(id))
+    writeFileSync(filePath, buffer)
+    q.insert('UPDATE attachments SET path = ? WHERE id = ?', [filePath, id])
+    const avatarUrl = `/files/${id}`
+    q.insert('UPDATE users SET avatar_url = ? WHERE id = ?', [avatarUrl, user.id])
+    const updated = q.get('SELECT * FROM users WHERE id = ?', [user.id])
+    audit(user.id, 'user.avatar_update', { avatarUrl })
+    hub.broadcastAll({ op: 'user_update', payload: publicUser(updated) })
+    return send(res, 200, { user: publicUser(updated), avatarUrl })
+  }
+
+  add('POST', '/api/me/avatar', auth(handleAvatarUpload))
+  add('PATCH', '/api/me/avatar', auth(handleAvatarUpload))
+
+  add('DELETE', '/api/me/avatar', auth(async ({ res, user }) => {
+    q.insert('UPDATE users SET avatar_url = NULL WHERE id = ?', [user.id])
+    const updated = q.get('SELECT * FROM users WHERE id = ?', [user.id])
+    audit(user.id, 'user.avatar_remove', {})
+    hub.broadcastAll({ op: 'user_update', payload: publicUser(updated) })
+    return send(res, 200, { user: publicUser(updated) })
   }))
 
   return routes

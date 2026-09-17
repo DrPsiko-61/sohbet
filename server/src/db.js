@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS users (
   display_name  TEXT NOT NULL,
   password_hash TEXT NOT NULL,
   avatar_color  TEXT NOT NULL DEFAULT '#5865f2',
+  avatar_url    TEXT,
   role          TEXT NOT NULL DEFAULT 'member',
   disabled      INTEGER NOT NULL DEFAULT 0,
   created_at    INTEGER NOT NULL
@@ -100,6 +101,10 @@ CREATE INDEX IF NOT EXISTS idx_attachments_message ON attachments(message_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(id DESC);
 `)
+
+try {
+  db.exec('ALTER TABLE users ADD COLUMN avatar_url TEXT')
+} catch {}
 
 export const q = {
   insert: (sql, params = []) => db.prepare(sql).run(...params),

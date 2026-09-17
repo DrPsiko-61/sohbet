@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
-<link rel="stylesheet" href="/app.css?v=36">
+<link rel="stylesheet" href="/app.css?v=38">
 </head>
 <body>
 
@@ -95,6 +95,9 @@
         <small id="head-topic"></small>
       </div>
       <span id="net-badge" class="net-badge" title="Bağlantı durumu"></span>
+      <button id="btn-members-toggle" class="icon-btn" aria-label="Üye listesi" type="button" title="Üye listesi">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      </button>
       <button id="btn-chat-side" class="icon-btn only-mobile" aria-label="Sohbet paneli" type="button" title="Sohbet paneli">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.3 8.9 8.9 0 0 1-3.8-.9L3 20l1.2-5.4A8.1 8.1 0 0 1 3.5 11.5 8.4 8.4 0 0 1 12 3.2a8.4 8.4 0 0 1 9 8.3Z"/></svg>
       </button>
@@ -164,52 +167,72 @@
     </form>
   </aside>
 
-  <!-- sesli kanal katılımcı paneli (masaüstü) -->
+  <!-- ses ayarları paneli (sekmeli) -->
   <aside id="voice-side" class="voice-side" hidden>
     <div class="side-head">
-      <h3>Sesli kanal</h3>
+      <h3>Ses Ayarları</h3>
       <button id="btn-close-vside" class="icon-btn" aria-label="Ayarları kapat" type="button" title="Ayarları kapat">
         <svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
       </button>
     </div>
-    <div id="vs-people"></div>
-    <div id="vs-devices" class="vs-devices" hidden>
-      <h4>Cihazlar</h4>
-      <label class="field"><span>Mikrofon</span><select id="sel-mic"></select></label>
-      <label class="field"><span>Kamera</span><select id="sel-cam"></select></label>
-      <p class="muted" id="dev-msg" hidden></p>
+    <nav class="vtabs" id="vsettings-tabs">
+      <button class="vtab active" data-tab="devices" type="button">Cihazlar</button>
+      <button class="vtab" data-tab="ptt" type="button">Konuşma</button>
+      <button class="vtab" data-tab="camera" type="button">Kamera</button>
+      <button class="vtab" data-tab="share" type="button">Ekran</button>
+      <button class="vtab" data-tab="card" type="button">Kart</button>
+    </nav>
+    <div class="vtab-panels">
+      <div id="vs-devices" class="vs-devices">
+        <h4>Cihazlar</h4>
+        <label class="field"><span>Mikrofon</span><select id="sel-mic"></select></label>
+        <label class="field"><span>Kamera</span><select id="sel-cam"></select></label>
+        <p class="muted" id="dev-msg" hidden></p>
+      </div>
+      <div id="vs-ptt" class="vs-devices" hidden>
+        <h4>Konuşma modu</h4>
+        <label class="field"><span>Mod</span><select id="sel-konusma-mod"></select></label>
+        <label class="field" id="ptt-key-field"><span>Konuşma tuşu</span><select id="sel-ptt-key"></select></label>
+        <label class="field" id="vad-field" hidden>
+          <span>Hassasiyet: <b id="vad-val">Orta</b></span>
+          <input id="vad-range" type="range" min="0" max="100" step="5" value="60">
+        </label>
+        <p class="muted">Bas konuş: tuşu basılı tut. Ses algılama: konuşunca otomatik açılır — arka planda (alt+tab) da çalışır. Yalnızca bilgisayarda.</p>
+      </div>
+      <div id="vs-camera" class="vs-devices" hidden>
+        <h4>Kamera</h4>
+        <label class="field"><span>Kalite</span><select id="sel-cam-quality"></select></label>
+        <p class="muted" id="cam-msg" hidden></p>
+      </div>
+      <div id="vs-share" class="vs-devices" hidden>
+        <h4>Ekran paylaşımı</h4>
+        <label class="field"><span>Çözünürlük · kare hızı</span><select id="sel-share-quality"></select></label>
+        <label class="field"><span>Paylaşılacak ses</span><select id="sel-share-audio"></select></label>
+        <label class="field"><span>Görüntü kodeği</span><select id="sel-share-codec"></select></label>
+        <p class="muted" id="share-msg" hidden></p>
+      </div>
+      <div id="vs-card" class="vs-devices" hidden>
+        <h4>Capture card</h4>
+        <label class="field"><span>Kart (HDMI/USB video)</span><select id="sel-card-device"></select></label>
+        <label class="field"><span>Kart sesi</span><select id="sel-card-audio"></select></label>
+        <label class="field"><span>Çözünürlük · kare hızı</span><select id="sel-card-quality"></select></label>
+        <label class="field"><span>Görüntü kodeği</span><select id="sel-card-codec"></select></label>
+        <p class="muted" id="card-msg" hidden></p>
+      </div>
     </div>
-    <div id="vs-ptt" class="vs-devices" hidden>
-      <h4>Konuşma modu</h4>
-      <label class="field"><span>Mod</span><select id="sel-konusma-mod"></select></label>
-      <label class="field" id="ptt-key-field"><span>Konuşma tuşu</span><select id="sel-ptt-key"></select></label>
-      <label class="field" id="vad-field" hidden>
-        <span>Hassasiyet: <b id="vad-val">Orta</b></span>
-        <input id="vad-range" type="range" min="0" max="100" step="5" value="60">
-      </label>
-      <p class="muted">Bas konuş: tuşu basılı tut. Ses algılama: konuşunca otomatik açılır — arka planda (alt+tab) da çalışır. Yalnızca bilgisayarda.</p>
-    </div>
-    <div id="vs-camera" class="vs-devices" hidden>
-      <h4>Kamera</h4>
-      <label class="field"><span>Kalite</span><select id="sel-cam-quality"></select></label>
-      <p class="muted" id="cam-msg" hidden></p>
-    </div>
-    <div id="vs-share" class="vs-devices" hidden>
-      <h4>Ekran paylaşımı</h4>
-      <label class="field"><span>Çözünürlük · kare hızı</span><select id="sel-share-quality"></select></label>
-      <label class="field"><span>Paylaşılacak ses</span><select id="sel-share-audio"></select></label>
-      <label class="field"><span>Görüntü kodeği</span><select id="sel-share-codec"></select></label>
-      <p class="muted" id="share-msg" hidden></p>
-    </div>
-    <div id="vs-card" class="vs-devices" hidden>
-      <h4>Capture card</h4>
-      <label class="field"><span>Kart (HDMI/USB video)</span><select id="sel-card-device"></select></label>
-      <label class="field"><span>Kart sesi</span><select id="sel-card-audio"></select></label>
-      <label class="field"><span>Çözünürlük · kare hızı</span><select id="sel-card-quality"></select></label>
-      <label class="field"><span>Görüntü kodeği</span><select id="sel-card-codec"></select></label>
-      <p class="muted" id="card-msg" hidden></p>
-    </div>
+    <div id="vs-people" hidden></div>
     <p class="muted" id="vs-keepawake" hidden>Ekran uyanık tutuluyor</p>
+  </aside>
+
+  <!-- üye listesi (Discord benzeri sağ panel) -->
+  <aside id="members-side" class="members-side">
+    <div class="side-head">
+      <h3 id="members-title">Üyeler</h3>
+      <button id="btn-close-mside" class="icon-btn only-mobile" aria-label="Üye listesini kapat" type="button" title="Kapat">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+      </button>
+    </div>
+    <div id="members-list" class="members-list"></div>
   </aside>
 </section>
 
@@ -234,8 +257,19 @@
 <section id="screen-me" class="screen sheet" hidden>
   <div class="sheet-card">
     <h2>Hesabım</h2>
+
+    <div class="me-avatar-edit">
+      <div id="me-avatar-preview" class="avatar lg"></div>
+      <div class="me-avatar-actions">
+        <button id="btn-choose-avatar" class="btn-sm" type="button">Resim Seç</button>
+        <button id="btn-remove-avatar" class="btn-sm danger" type="button" hidden>Resmi Kaldır</button>
+        <input id="in-avatar" type="file" accept="image/*" hidden>
+        <small class="muted">PNG, JPG, WebP veya GIF (en fazla 4 MB)</small>
+      </div>
+    </div>
+
     <label class="field"><span>Görünen ad</span><input id="me-display" type="text" maxlength="32"></label>
-    <label class="field"><span>Avatar rengi</span><input id="me-color" type="color"></label>
+    <label class="field"><span>Avatar rengi (resim yokken)</span><input id="me-color" type="color"></label>
     <label class="field"><span>Yeni parola (boş bırak = değişmez)</span><input id="me-pass" type="password" minlength="8" autocomplete="new-password"></label>
     <div id="field-invite-code" hidden>
       <label class="field"><span>Davet kodu (yeni kişiler kayıt olurken bunu girer)</span><input id="me-invite" type="text" readonly></label>
@@ -273,6 +307,6 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="/app.js?v=36" type="module"></script>
+<script src="/app.js?v=38" type="module"></script>
 </body>
 </html>
