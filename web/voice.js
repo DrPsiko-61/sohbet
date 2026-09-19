@@ -392,13 +392,22 @@ const pubs = new Map();
 /// Yalnizca listedeki kullanicilarin KAMERA yayini indirilir; digerleri askiya
 /// alinir. `null` verilirse tum kameralar acilir. Ekran paylasimi yayinlari ve
 /// tum sesler etkilenmez: yalnizca ekranda gorunmeyen goruntu indirilmez.
+/// setEnabled, durum HIC degismese bile ilk cagrida sunucuya track guncellemesi
+/// gonderip yayini yeniden baslatiyor; tam ekranda gorunen kameraya bu cagri
+/// gittiginde goruntu donuyordu. Bu yuzden son uygulanan durum nesneyle birlikte
+/// izlenir ve setEnabled yalnizca GERCEKTEN degisiyorsa cagrilir.
+const camState = new Map();
+
 export function setVisibleCameras(keys) {
   const izinli = keys == null ? null : new Set(Array.from(keys, String));
   for (const [key, p] of pubs) {
     const pub = p.camera;
-    if (!pub) continue;
+    if (!pub || pub.isLocal) continue;
     const acik = izinli == null || izinli.has(key);
-    try { pub.setEnabled(acik); } catch {}
+    const oncek = camState.get(key);
+    if (oncek && oncek.pub === pub && oncek.acik === acik) continue;
+    camState.set(key, { pub, acik });
+    try { pub.setEnabled(acik); } catch { camState.delete(key); }
   }
 }
 
@@ -710,7 +719,7 @@ function dropTrack(identity, source, Track) {
   const entry = pendingTracks.get(key);
   const yayinlar = pubs.get(key);
   if (yayinlar) {
-    if (source === Track.Source.Camera) delete yayinlar.camera;
+    if (source === Track.Source.Camera) { delete yayinlar.camera; camState.delete(key); }
     else if (source === Track.Source.ScreenShare) delete yayinlar.screen;
   }
   if (!entry) return;
