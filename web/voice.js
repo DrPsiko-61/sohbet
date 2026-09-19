@@ -404,8 +404,14 @@ export function setVisibleCameras(keys) {
     const pub = p.camera;
     if (!pub || pub.isLocal) continue;
     const acik = izinli == null || izinli.has(key);
+    // Yayinin GERCEK durumu: requestedDisabled henuz hic ayarlanmadiysa kamera
+    // iniyor demektir (varsayilan acik). Durum istenenle ayniysa setEnabled
+    // HIC cagrilmaz; cagrilirsa sunucuya track guncellemesi gidip yayin
+    // yeniden baslar ve goruntu anlik donar.
+    const simdiAcik = pub.requestedDisabled !== true;
     const oncek = camState.get(key);
-    if (oncek && oncek.pub === pub && oncek.acik === acik) continue;
+    if (oncek && oncek.pub !== pub) camState.delete(key);
+    if (simdiAcik === acik) { camState.set(key, { pub, acik }); continue; }
     camState.set(key, { pub, acik });
     try { pub.setEnabled(acik); } catch { camState.delete(key); }
   }
