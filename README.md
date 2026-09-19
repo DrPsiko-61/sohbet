@@ -63,6 +63,18 @@ Kurulum tamamlandığında otomatik olarak tek bir yönetici hesabı oluşturulu
 | 📹 **Görüntülü & Ekran Paylaşımı** | Kamera, ekran yayını ve harici video yakalama kartı (USB Capture Card) desteği. |
 | 🔒 **%100 Özel & Bağımsız** | Ağır SQL sunucuları yok; hafif ve hızlı `node:sqlite` ile tüm verileriniz kendi makinenizde kalır. |
 | 📱 **Tam PWA Desteği** | Telefon veya bilgisayara hafif bir yerel uygulama gibi kurulabilir. |
+| 🖼️ **Profil Resmi Yükleme** | PNG, JPG, WebP veya GIF profil resmi yükleyin; resim yokken renk + baş harf avatarları gösterilir. |
+| 🏷️ **Rol Etiketleri** | Kullanıcı adlarının yanında Discord tarzı rozetler: **KURUCU** (mavi), **YÖNETİCİ** (kırmızı), **MOD** (sarı), **BOT** (yeşil). |
+| 👥 **Üye Listesi Paneli** | Sağ tarafta Discord benzeri üye paneli: sesli odadakiler canlı konuşma göstergesiyle, diğerleri çevrimiçi/çevrimdışı olarak listelenir. |
+| ⚙️ **Sekmeli Ayarlar** | Ses ayarları sekmelere ayrıldı: **Cihazlar / Konuşma / Kamera / Ekran / Kart**. |
+| ✏️ **Mesaj Düzenleme** | Gönderdiğiniz mesajları satır içi düzenleyin; "(düzenlendi)" işareti herkese yansır. |
+| 🔔 **@Bahsetme & Bildirim** | `@` yazınca kullanıcı listesi açılır; etiketlenen kişiye anlık bildirim gider. |
+| 🎨 **Zengin Metin** | `**kalın**`, `*italik*`, `` `kod` ``, kod blokları ve bağlantılar otomatik biçimlenir (XSS güvenli). |
+| 🎤 **Sesli Mesaj** | Tek dokunuşla kayıt alın, mesaj olarak gönderin; yerleşik oynatıcıyla dinleyin. |
+| 🎞️ **GIF Ekleme** | Kompozere GIF butonu: arama paneli açılır, GIF seçip gönderin. (`GIPHY_API_KEY` ile canlı arama) |
+| 🔇 **Gürültü Engelleme** | Tarayıcının yerleşik RNNoise gürültü engellemesi tek anahtarla açılıp kapanır. |
+| 💬 **Özel Durum Mesajı** | "yayında", "ders çalışıyorum" gibi durum mesajı; üye listesinde ve kendi kutunda görünür. |
+| 🌈 **Tema Seçenekleri** | **Karanlık, Açık, Spider-Man, Superman, Deadpool** temaları arasından seçim yapın. |
 
 ---
 
