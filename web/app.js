@@ -1624,8 +1624,8 @@ function videoTasarrufuUygula() {
   }
   const [tur, id] = String(voiceDom.maximized).split('-');
   // Ekran paylaşımı büyütülmüşse hiçbir kamera inmez; kamera büyütülmüşse
-  // yalnızca o kişinin kamerası iner.
-  mod.setVisibleCameras(tur === 'camera' ? [id] : []);
+  // yalnızca o kişinin kamerası iner. (Anahtar biçimi: cam-{id} / screen-{id})
+  mod.setVisibleCameras(tur === 'cam' ? [id] : []);
 }
 
 /// Kayıtlı kişi ses seviyelerini yeni katılımcılara uygular (bir kez).

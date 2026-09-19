@@ -1,6 +1,6 @@
 /* Servis calisani: varlik onbellegi -> tekrar ziyaretlerde indirme ~0 */
 
-const VERSION = 'v38';
+const VERSION = 'v39';
 const SHELL = `shell-${VERSION}`;
 const RUNTIME = `runtime-${VERSION}`;
 
@@ -43,7 +43,7 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== location.origin) return;
   if (url.pathname.startsWith('/api/') || url.pathname === '/ws') return;
   // Indirme sayfasi ve kurulum dosyasi onbellege girmez
-  if (/\.(exe|msi|zip|apk)$/i.test(url.pathname)) return;
+  if (url.pathname.startsWith('/indir') || /\.(exe|msi|zip|apk)$/i.test(url.pathname)) return;
 
   if (request.mode === 'navigate') {
     event.respondWith(
