@@ -190,6 +190,45 @@ a.btn-link{display:block;text-align:center}
 .me-avatar-actions .btn-sm{padding:6px 12px;font-size:12px;border-radius:6px;cursor:pointer;border:1px solid var(--line);background:var(--bg4);font-weight:600;color:inherit;align-self:flex-start}
 .me-avatar-actions .btn-sm:hover{background:var(--bg2)}
 .me-avatar-actions .btn-sm.danger{color:var(--danger);border-color:rgba(237,66,69,.4)}
+
+/* ---------- zengin metin ---------- */
+.rich{word-break:break-word}
+.rich strong{font-weight:700}
+.rich em{font-style:italic}
+.rich .code-inline{background:var(--bg4);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font:12px/1.4 ui-monospace,Consolas,monospace}
+.rich .code-block{background:var(--bg4);border:1px solid var(--line);border-radius:8px;padding:8px 10px;overflow-x:auto;font:12px/1.5 ui-monospace,Consolas,monospace;white-space:pre;margin:4px 0}
+.rich a{color:var(--brand);text-decoration:underline}
+.rich .mention{background:rgba(88,101,242,.25);color:#aab4ff;border-radius:4px;padding:0 4px;font-weight:600}
+.edited-mark{color:var(--muted);font-size:11px;margin-left:4px}
+
+/* ---------- mesaj düzenleme ---------- */
+.edit-box{display:flex;flex-direction:column;gap:6px;margin:4px 0}
+.edit-input{width:100%;background:var(--bg3);border:1px solid var(--brand);border-radius:8px;padding:8px;resize:vertical;min-height:44px}
+.edit-actions{display:flex;gap:8px}
+.edit-actions .btn-sm{padding:5px 12px;font-size:12px;border-radius:6px;background:var(--bg4);border:1px solid var(--line);font-weight:600;cursor:pointer}
+.edit-actions .btn-sm:first-child{background:var(--brand);color:#fff;border-color:transparent}
+
+/* ---------- @bahsetme ---------- */
+.mention-list{position:absolute;bottom:100%;left:0;right:0;background:var(--bg3);border:1px solid var(--line);border-radius:10px;max-height:240px;overflow-y:auto;z-index:60;box-shadow:0 -4px 20px rgba(0,0,0,.35)}
+.mention-item{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;font-size:13px;text-align:left;color:var(--fg)}
+.mention-item.active,.mention-item:hover{background:var(--brand);color:#fff}
+.mention-item.active .muted,.mention-item:hover .muted{color:rgba(255,255,255,.8)}
+.mention-item small{margin-left:auto}
+
+/* ---------- GIF paneli ---------- */
+.gif-panel{position:absolute;bottom:100%;left:0;right:0;background:var(--bg3);border:1px solid var(--line);border-radius:10px;z-index:60;box-shadow:0 -4px 20px rgba(0,0,0,.35);display:flex;flex-direction:column;max-height:320px}
+.gif-head{display:flex;gap:6px;padding:8px;border-bottom:1px solid var(--line)}
+.gif-head input{flex:1;background:var(--bg4);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:13px}
+.gif-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:8px;overflow-y:auto}
+.gif-grid img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer;background:var(--bg4)}
+.gif-grid img:hover{outline:2px solid var(--brand)}
+.gif-grid p{padding:8px;text-align:center}
+
+/* ---------- sesli mesaj ---------- */
+.msg-att audio{width:100%;max-width:320px;height:36px;margin:2px 0}
+#btn-voice-msg.rec{color:var(--danger);animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.4}}
+.composer{position:relative}
 .chat-side .field{margin-bottom:10px}
 .cside-msgs{flex:1;overflow-y:auto;min-height:0;display:flex;flex-direction:column;gap:8px;padding-right:2px;-webkit-overflow-scrolling:touch}
 .cside-msg{background:var(--bg3);border:1px solid var(--line);border-radius:10px;padding:8px 10px;line-height:1.4}

@@ -1,5 +1,6 @@
 import { createReadStream, existsSync, statSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs'
 import { join, extname, normalize } from 'node:path'
+import { get as httpsGet } from 'node:https'
 import { q, audit } from './db.js'
 import {
   hashPassword, verifyPassword, createSession, sessionUser, destroySession,
@@ -271,7 +272,7 @@ export function buildRoutes({ hub }) {
   add('GET', '/api/bootstrap', auth(async ({ res, user }) => {
     const servers = q.all('SELECT * FROM servers ORDER BY id')
     const members = q.all(
-      `SELECT m.server_id, m.role, m.joined_at, u.id, u.username, u.display_name, u.avatar_color, u.avatar_url
+      `SELECT m.server_id, m.role, m.joined_at, u.id, u.username, u.display_name, u.avatar_color, u.avatar_url, u.status
          FROM members m JOIN users u ON u.id = m.user_id ORDER BY u.display_name`
     )
     const users = q.all('SELECT * FROM users ORDER BY display_name').map((u) => ({
@@ -308,6 +309,7 @@ export function buildRoutes({ hub }) {
             displayName: m.display_name,
             avatarColor: m.avatar_color,
             avatarUrl: m.avatar_url || null,
+            status: m.status || null,
             isBot
           }
         })
@@ -350,6 +352,28 @@ export function buildRoutes({ hub }) {
     const row = q.get('SELECT * FROM messages WHERE id = ?', [messageId])
     const payload = messageRow(row)
     hub.broadcastChannel(channel.id, { op: 'message_create', payload })
+    // @bahsetme: mesajda @kullaniciadi gecen kullanicilara bildirim gonderilir.
+    const mentionMatches = content.match(/@([\w.\-]+)/g) || []
+    if (mentionMatches.length) {
+      const mentioned = new Set()
+      for (const m of mentionMatches) {
+        const uname = m.slice(1).toLowerCase()
+        const target = q.get('SELECT id FROM users WHERE username = ? COLLATE NOCASE', [uname])
+        if (target && target.id !== user.id) mentioned.add(target.id)
+      }
+      for (const targetId of mentioned) {
+        hub.sendTo(targetId, {
+          op: 'mention',
+          payload: {
+            channelId: channel.id,
+            channelName: channel.name,
+            messageId,
+            from: publicUser(user),
+            content: content.slice(0, 120)
+          }
+        })
+      }
+    }
     // "!" ile baslayan mesajlar muzik botu komutu olabilir.
     muzikKomut({ metin: content, user, kanal: channel })
     return send(res, 201, { message: payload })
@@ -404,6 +428,47 @@ export function buildRoutes({ hub }) {
     writeFileSync(filePath, buffer)
     q.insert('UPDATE attachments SET path = ? WHERE id = ?', [filePath, id])
     return send(res, 201, { attachment: { id, url: `/files/${id}`, filename: name, mime, size: buffer.length } })
+  }))
+
+  add('GET', '/api/gifs/search', auth(async ({ res, url }) => {
+    const qText = String(url.searchParams.get('q') || '').trim().slice(0, 60)
+    if (!qText) return send(res, 400, { error: 'empty_query' })
+    const key = process.env.GIPHY_API_KEY || ''
+    // GIPHY_API_KEY tanimliyken canli arama yapilir; yoksa hazir GIF seti doner.
+    if (key) {
+      const apiUrl = `https://api.giphy.com/v1/gifs/search?api_key=${encodeURIComponent(key)}&q=${encodeURIComponent(qText)}&limit=24&rating=g&lang=tr`
+      try {
+        const data = await new Promise((resolve, reject) => {
+          httpsGet(apiUrl, (r) => {
+            let b = []
+            r.on('data', (c) => b.push(c))
+            r.on('end', () => {
+              try { resolve(JSON.parse(Buffer.concat(b).toString())) } catch (e) { reject(e) }
+            })
+          }).on('error', reject)
+        })
+        const gifs = (data.data || []).map((g) => ({
+          id: g.id,
+          url: g.images?.fixed_width?.url || g.images?.original?.url,
+          preview: g.images?.fixed_width_small?.url || g.images?.fixed_width?.url,
+          width: g.images?.fixed_width?.width,
+          height: g.images?.fixed_width?.height
+        })).filter((g) => g.url)
+        if (gifs.length) return send(res, 200, { gifs })
+      } catch {}
+    }
+    // Hazir set: kararli Giphy CDN baglantilari (anahtar gerektirmez).
+    const hazir = [
+      '3o7abKhOpu0NwenH3O', '26ufdipQqU2lhNA4g', '3oEjI6SIIHBdRxXI40', 'l0MYt5jPR6QX5pnqM',
+      '3o7aD2saalBwwftBIY', '26BRuo6sLetdllPAQ', '3o7TKSjRrfIPjeiVyM', '3o7abldj0b3rxrZUxW',
+      '3o7aCTfyhYawdOXcFW', '26tPplGWjN0xLybiU', '3o7aCSPqXE5C6T8tBC', '3o7TKtnuHvHUzCRlW0'
+    ]
+    const gifs = hazir.map((id) => ({
+      id,
+      url: `https://media.giphy.com/media/${id}/giphy.gif`,
+      preview: `https://media.giphy.com/media/${id}/giphy.gif`
+    }))
+    return send(res, 200, { gifs })
   }))
 
   add('POST', '/api/channels/:id/voice-token', auth(async ({ req, res, user, params }) => {
@@ -618,6 +683,10 @@ export function buildRoutes({ hub }) {
       const aUrl = body.avatarUrl ? String(body.avatarUrl) : null
       q.insert('UPDATE users SET avatar_url = ? WHERE id = ?', [aUrl, targetId])
     }
+    if (body.status !== undefined) {
+      const status = String(body.status || '').trim().slice(0, 80)
+      q.insert('UPDATE users SET status = ? WHERE id = ?', [status || null, targetId])
+    }
     if (body.password !== undefined) {
       if (!selfEdit && !atLeast(user.role, ROLES.ADMIN)) return send(res, 403, { error: 'forbidden' })
       const password = String(body.password)
@@ -732,7 +801,9 @@ export function serveFile(req, res, pathname) {
   }
 
   const relative = pathname === '/' ? '/index.html' : pathname
-  const target = normalize(join(WEB_DIR, relative))
+  // /indir  ->  kurulum indirme sayfasi
+  const resolved = relative === '/indir' || relative === '/indir/' ? '/indir.html' : relative
+  const target = normalize(join(WEB_DIR, resolved))
   if (!target.startsWith(normalize(WEB_DIR))) return send(res, 403, { error: 'forbidden' })
   if (!existsSync(target) || !statSync(target).isFile()) {
     // /ses/* gibi medya dosyalari yoksa SPA fallback'ine dusmesin: tarayici

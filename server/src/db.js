@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   avatar_color  TEXT NOT NULL DEFAULT '#5865f2',
   avatar_url    TEXT,
+  status        TEXT,
   role          TEXT NOT NULL DEFAULT 'member',
   disabled      INTEGER NOT NULL DEFAULT 0,
   created_at    INTEGER NOT NULL
@@ -104,6 +105,9 @@ CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(id DESC);
 
 try {
   db.exec('ALTER TABLE users ADD COLUMN avatar_url TEXT')
+} catch {}
+try {
+  db.exec('ALTER TABLE users ADD COLUMN status TEXT')
 } catch {}
 
 export const q = {

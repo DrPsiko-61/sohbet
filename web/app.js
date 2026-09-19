@@ -58,6 +58,8 @@ const voice = {
   pttKey: localStorage.getItem('sohbet.ptt.tus') || 'Space',
   // Konuşma modu: 'ptt' (bas konuş) veya 'vad' (ses algılama). VAD arka planda da çalışır.
   konusmaMod: localStorage.getItem('sohbet.konusma.mod') === 'vad' ? 'vad' : 'ptt',
+  // Gürültü engelleme (tarayıcının yerleşik RNNoise'ı)
+  gurultu: localStorage.getItem('sohbet.gurultu') !== '0',
   vad: false,
   vadEsik: (() => {
     const v = Number(localStorage.getItem('sohbet.vad.esik') ?? NaN);
@@ -122,6 +124,43 @@ function roleTagNode(role, isBot) {
   };
   tag.textContent = labels[r] || r.toUpperCase();
   return tag;
+}
+
+/// Zengin metin render'i: **kalın**, *italik*, `kod`, ```blok``` ve bağlantılar.
+/// Metin önce HTML-kaçışlanır, sonra güvenli etiketlerle işaretlenir.
+function escapeHtml(text) {
+  return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function renderRichText(content) {
+  const div = document.createElement('div');
+  div.className = 'rich';
+  let text = escapeHtml(content);
+  // Kod blokları (```...```) önce korunur.
+  const blocks = [];
+  text = text.replace(/```([\s\S]*?)```/g, (_, code) => {
+    blocks.push(`<pre class="code-block">${code}</pre>`);
+    return `\u0000${blocks.length - 1}\u0000`;
+  });
+  // Satır içi kod (`...`)
+  text = text.replace(/`([^`\n]+)`/g, '<code class="code-inline">$1</code>');
+  // Bağlantılar (http/https)
+  text = text.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+  // Kalın **...**
+  text = text.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  // İtalik *...*
+  text = text.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+  // @bahsetme vurgusu
+  text = text.replace(/@([\w.\-]+)/g, (m, uname) => {
+    const u = Array.from(state.users.values()).find((x) => x.username?.toLowerCase() === uname.toLowerCase());
+    return u ? `<span class="mention">@${escapeHtml(u.displayName)}</span>` : m;
+  });
+  // Satır sonları
+  text = text.replace(/\n/g, '<br>');
+  // Korunan blokları geri koy
+  text = text.replace(/\u0000(\d+)\u0000/g, (_, i) => blocks[Number(i)]);
+  div.innerHTML = text;
+  return div;
 }
 
 function fmtTime(ts) {
@@ -299,7 +338,7 @@ function renderMe() {
   const me = state.me;
   $('me-name').textContent = me.displayName;
   $('me-avatar').replaceWith(Object.assign(avatarNode(me), { id: 'me-avatar' }));
-  $('me-status').textContent = { owner: 'kurucu', admin: 'yönetici', mod: 'moderatör', guest: 'misafir' }[me.role] || 'çevrimiçi';
+  $('me-status').textContent = me.status || ({ owner: 'kurucu', admin: 'yönetici', mod: 'moderatör', guest: 'misafir' }[me.role] || 'çevrimiçi');
   $('btn-panel').hidden = !['owner', 'admin', 'mod'].includes(me.role);
 }
 
@@ -480,6 +519,13 @@ function messageNode(message, grouped) {
     head.append(time);
     const actions = el('div', 'msg-actions');
     actions.style.marginLeft = 'auto';
+    if (message.userId === state.me.id) {
+      const edit = el('button', null, '✏️');
+      edit.type = 'button';
+      edit.title = 'Düzenle';
+      edit.addEventListener('click', () => startEditMessage(message.id));
+      actions.append(edit);
+    }
     if (message.userId === state.me.id || ['owner', 'admin', 'mod'].includes(state.me.role)) {
       const del = el('button', null, '🗑');
       del.type = 'button';
@@ -498,13 +544,21 @@ function messageNode(message, grouped) {
     body.append(quote);
   }
   if (message.content) {
-    const text = el('div', 'msg-text' + (message.editedAt ? ' edited' : ''), message.content);
+    const text = el('div', 'msg-text' + (message.editedAt ? ' edited' : ''));
+    text.append(renderRichText(message.content));
+    if (message.editedAt) text.append(el('span', 'edited-mark', ' (düzenlendi)'));
     body.append(text);
   }
   if (message.attachments?.length) {
     const wrap = el('div', 'msg-att');
     for (const file of message.attachments) {
-      if (file.mime?.startsWith('image/')) {
+      if (file.mime?.startsWith('audio/')) {
+        const audio = el('audio');
+        audio.controls = true;
+        audio.preload = 'metadata';
+        audio.src = file.url;
+        wrap.append(audio);
+      } else if (file.mime?.startsWith('image/')) {
         const img = el('img');
         img.loading = 'lazy';
         img.decoding = 'async';
@@ -585,6 +639,66 @@ async function deleteMessage(id) {
   }
 }
 
+let editingMessageId = null;
+
+function startEditMessage(id) {
+  const message = state.messages.find((m) => m.id === id);
+  if (!message) return;
+  editingMessageId = id;
+  const node = $('msg-list').querySelector(`[data-mid="${id}"]`);
+  if (!node) return;
+  const textEl = node.querySelector('.msg-text');
+  if (!textEl) return;
+  textEl.innerHTML = '';
+  const editor = el('div', 'edit-box');
+  const input = el('textarea', 'edit-input', message.content);
+  input.maxLength = 4000;
+  input.rows = 2;
+  const row = el('div', 'edit-actions');
+  const save = el('button', 'btn-sm', 'Kaydet');
+  save.type = 'button';
+  save.addEventListener('click', () => saveEditMessage(id, input.value));
+  const cancel = el('button', 'btn-sm', 'Vazgeç');
+  cancel.type = 'button';
+  cancel.addEventListener('click', () => cancelEditMessage(id));
+  row.append(save, cancel);
+  editor.append(input, row);
+  textEl.append(editor);
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+}
+
+async function saveEditMessage(id, content) {
+  content = content.trim();
+  if (!content) return cancelEditMessage(id);
+  try {
+    const res = await api(`/api/messages/${id}`, { method: 'PATCH', body: { content } });
+    const index = state.messages.findIndex((m) => m.id === id);
+    if (index >= 0) state.messages[index] = res.message;
+    const node = $('msg-list').querySelector(`[data-mid="${id}"] .msg-text`);
+    if (node) {
+      node.innerHTML = '';
+      node.append(renderRichText(res.message.content));
+      if (res.message.editedAt) node.append(el('span', 'edited-mark', ' (düzenlendi)'));
+      node.classList.add('edited');
+    }
+  } catch (error) {
+    toast(tr(error.message));
+  }
+  editingMessageId = null;
+}
+
+function cancelEditMessage(id) {
+  const message = state.messages.find((m) => m.id === id);
+  const node = $('msg-list').querySelector(`[data-mid="${id}"] .msg-text`);
+  if (node && message) {
+    node.innerHTML = '';
+    node.append(renderRichText(message.content));
+    if (message.editedAt) node.append(el('span', 'edited-mark', ' (düzenlendi)'));
+  }
+  editingMessageId = null;
+}
+
 function removeMessage(id) {
   $('msg-list').querySelector(`[data-mid="${id}"]`)?.remove();
   state.messages = state.messages.filter((m) => m.id !== id);
@@ -606,7 +720,7 @@ composer.addEventListener('input', () => {
 });
 
 composer.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter' && !event.shiftKey && window.innerWidth >= 820) {
+  if (event.key === 'Enter' && !event.shiftKey && window.innerWidth >= 820 && $('mention-list').hidden) {
     event.preventDefault();
     $('form-send').requestSubmit();
   }
@@ -680,6 +794,192 @@ function renderAttachPreview() {
     box.append(chip);
   }
   box.hidden = !state.uploading.length;
+}
+
+/* ==================== @BAHSETME ==================== */
+const mentionList = $('mention-list');
+let mentionQuery = '';
+let mentionIndex = 0;
+
+function mentionCandidates() {
+  const q = mentionQuery.toLowerCase();
+  const users = Array.from(state.users.values())
+    .filter((u) => u.id !== state.me.id && u.username?.toLowerCase().includes(q))
+    .slice(0, 8);
+  return users;
+}
+
+function renderMentionList() {
+  const users = mentionCandidates();
+  if (!users.length) { mentionList.hidden = true; return; }
+  mentionList.innerHTML = '';
+  users.forEach((u, i) => {
+    const item = el('button', 'mention-item' + (i === mentionIndex ? ' active' : ''));
+    item.type = 'button';
+    item.append(avatarNode(u, 'xs'));
+    item.append(el('span', null, u.displayName));
+    item.append(el('small', 'muted', `@${u.username}`));
+    item.addEventListener('click', () => insertMention(u));
+    mentionList.append(item);
+  });
+  mentionList.hidden = false;
+}
+
+function insertMention(user) {
+  const composer = $('in-msg');
+  const before = composer.value.slice(0, composer.selectionStart);
+  const after = composer.value.slice(composer.selectionEnd);
+  const at = before.lastIndexOf('@');
+  const prefix = before.slice(0, at);
+  composer.value = `${prefix}@${user.username} ${after}`;
+  composer.focus();
+  const pos = composer.value.length - after.length;
+  composer.setSelectionRange(pos, pos);
+  mentionList.hidden = true;
+  composer.dispatchEvent(new Event('input'));
+}
+
+composer.addEventListener('input', () => {
+  const pos = composer.selectionStart;
+  const before = composer.value.slice(0, pos);
+  const at = before.lastIndexOf('@');
+  if (at >= 0 && !before.slice(at + 1).includes(' ')) {
+    mentionQuery = before.slice(at + 1);
+    mentionIndex = 0;
+    renderMentionList();
+  } else {
+    mentionList.hidden = true;
+  }
+});
+
+composer.addEventListener('keydown', (event) => {
+  if (!mentionList.hidden) {
+    const users = mentionCandidates();
+    if (event.key === 'ArrowDown') { event.preventDefault(); mentionIndex = (mentionIndex + 1) % users.length; renderMentionList(); return; }
+    if (event.key === 'ArrowUp') { event.preventDefault(); mentionIndex = (mentionIndex - 1 + users.length) % users.length; renderMentionList(); return; }
+    if (event.key === 'Enter' && users[mentionIndex]) { event.preventDefault(); insertMention(users[mentionIndex]); return; }
+    if (event.key === 'Escape') { mentionList.hidden = true; return; }
+  }
+  if (event.key === 'Enter' && !event.shiftKey && window.innerWidth >= 820) {
+    event.preventDefault();
+    $('form-send').requestSubmit();
+  }
+});
+
+/* ==================== GIF EKLEME ==================== */
+const gifPanel = $('gif-panel');
+const gifGrid = $('gif-grid');
+let gifTimer = null;
+
+$('btn-gif').addEventListener('click', () => {
+  gifPanel.hidden = !gifPanel.hidden;
+  if (!gifPanel.hidden) {
+    $('gif-search').focus();
+    gifAra($('gif-search').value || 'populer');
+  }
+});
+$('btn-gif-close').addEventListener('click', () => { gifPanel.hidden = true; });
+$('gif-search').addEventListener('input', () => {
+  clearTimeout(gifTimer);
+  gifTimer = setTimeout(() => gifAra($('gif-search').value), 400);
+});
+
+async function gifAra(q) {
+  if (!q.trim()) return;
+  gifGrid.innerHTML = '<p class="muted">Aranıyor...</p>';
+  try {
+    const data = await api(`/api/gifs/search?q=${encodeURIComponent(q)}`);
+    gifGrid.innerHTML = '';
+    if (!data.gifs?.length) {
+      gifGrid.append(el('p', 'muted', 'Sonuç bulunamadı'));
+      return;
+    }
+    for (const gif of data.gifs) {
+      const img = el('img');
+      img.loading = 'lazy';
+      img.src = gif.preview;
+      img.alt = 'GIF';
+      img.addEventListener('click', () => gifEkle(gif));
+      gifGrid.append(img);
+    }
+  } catch {
+    gifGrid.innerHTML = '<p class="muted">GIF servisine ulaşılamadı</p>';
+  }
+}
+
+async function gifEkle(gif) {
+  gifPanel.hidden = true;
+  try {
+    const res = await fetch(gif.url);
+    const blob = await res.blob();
+    const file = new File([blob], `gif-${Date.now()}.gif`, { type: 'image/gif' });
+    const up = await fetch(
+      `/api/channels/${state.channel.id}/upload?name=${encodeURIComponent(file.name)}&mime=image/gif`,
+      { method: 'POST', body: file, credentials: 'same-origin' }
+    );
+    const data = await up.json();
+    if (!up.ok) throw new Error(data.error || 'upload_failed');
+    state.uploading.push(data.attachment);
+    renderAttachPreview();
+    toast('GIF eklendi — göndermek için Enter');
+  } catch {
+    toast('GIF eklenemedi');
+  }
+}
+
+/* ==================== SESLİ MESAJ ==================== */
+let voiceRec = null;
+let voiceRecChunks = [];
+let voiceRecTimer = null;
+const btnVoiceMsg = $('btn-voice-msg');
+
+btnVoiceMsg.addEventListener('click', async () => {
+  if (voiceRec) { stopVoiceRec(); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    voiceRec = new MediaRecorder(stream);
+    voiceRecChunks = [];
+    voiceRec.addEventListener('dataavailable', (e) => { if (e.data.size) voiceRecChunks.push(e.data); });
+    voiceRec.addEventListener('stop', () => {
+      stream.getTracks().forEach((t) => t.stop());
+      clearInterval(voiceRecTimer);
+      btnVoiceMsg.classList.remove('rec');
+      const blob = new Blob(voiceRecChunks, { type: 'audio/webm' });
+      if (blob.size > 0) sendVoiceMessage(blob);
+    });
+    voiceRec.start();
+    btnVoiceMsg.classList.add('rec');
+    toast('Kayıt başladı — bitirmek için tekrar tıkla');
+    voiceRecTimer = setInterval(() => {
+      if (voiceRec && voiceRec.state === 'recording' && voiceRecChunks.reduce((s, c) => s + c.size, 0) > 8 * 1024 * 1024) {
+        stopVoiceRec();
+      }
+    }, 1000);
+  } catch {
+    toast('Mikrofona erişilemedi');
+  }
+});
+
+function stopVoiceRec() {
+  if (voiceRec && voiceRec.state !== 'inactive') voiceRec.stop();
+}
+
+async function sendVoiceMessage(blob) {
+  try {
+    const up = await fetch(
+      `/api/channels/${state.channel.id}/upload?name=sesli-mesaj.webm&mime=audio/webm`,
+      { method: 'POST', body: blob, credentials: 'same-origin' }
+    );
+    const data = await up.json();
+    if (!up.ok) throw new Error(data.error || 'upload_failed');
+    await api(`/api/channels/${state.channel.id}/messages`, {
+      method: 'POST',
+      body: { content: '', attachmentIds: [data.attachment.id] }
+    });
+    toast('Sesli mesaj gönderildi');
+  } catch {
+    toast('Sesli mesaj gönderilemedi');
+  }
 }
 
 /* ==================== SAĞ SOHBET PANELİ ==================== */
@@ -863,9 +1163,18 @@ function chatSideListele(autoScroll = true) {
     const kart = el('div', 'cside-msg');
     const kullanici = state.users.get(m.userId);
     kart.append(el('span', 'cside-name', kullanici?.displayName || 'Bilinmeyen'));
-    if (m.content) kart.append(el('div', 'cside-body', m.content));
+    if (m.content) kart.append(renderRichText(m.content));
     for (const f of m.attachments || []) {
-      if (f.mime?.startsWith('image/')) {
+      if (f.mime?.startsWith('audio/')) {
+        const audio = el('audio');
+        audio.controls = true;
+        audio.preload = 'metadata';
+        audio.src = f.url;
+        audio.style.width = '100%';
+        audio.style.maxWidth = '240px';
+        audio.style.height = '32px';
+        kart.append(audio);
+      } else if (f.mime?.startsWith('image/')) {
         const img = el('img');
         img.loading = 'lazy';
         img.decoding = 'async';
@@ -948,10 +1257,21 @@ function handleSocket(msg) {
       if (index >= 0) state.messages[index] = message;
       if (message.channelId === state.channel?.id) {
         const node = $('msg-list').querySelector(`[data-mid="${message.id}"] .msg-text`);
-        if (node) {
-          node.textContent = message.content;
+        if (node && editingMessageId !== message.id) {
+          node.innerHTML = '';
+          node.append(renderRichText(message.content));
+          if (message.editedAt) node.append(el('span', 'edited-mark', ' (düzenlendi)'));
           node.classList.add('edited');
         }
+      }
+      break;
+    }
+    case 'mention': {
+      const p = msg.payload;
+      if (p.channelId === state.channel?.id) {
+        toast(`🔔 ${p.from?.displayName || 'Biri'} seni etiketledi: ${p.content}`);
+      } else {
+        toast(`🔔 ${p.from?.displayName || 'Biri'} seni #${p.channelName} kanalında etiketledi`);
       }
       break;
     }
@@ -1407,6 +1727,8 @@ function renderMembersSide() {
         subClass = 'msub speaking';
       } else if (!p.mic) {
         subText = 'Mikrofon kapalı';
+      } else if (user.status) {
+        subText = user.status;
       }
       const msub = el('span', subClass, subText);
       minfo.append(msub);
@@ -1451,7 +1773,7 @@ function renderMembersSide() {
         const tag = roleTagNode(u.role, isBot);
         if (tag) mhead.append(tag);
         minfo.append(mhead);
-        minfo.append(el('span', 'msub' + (isBot ? ' music' : ''), isBot ? 'Müzik Botu' : 'Çevrimiçi'));
+        minfo.append(el('span', 'msub' + (isBot ? ' music' : ''), isBot ? 'Müzik Botu' : (u.status || 'Çevrimiçi')));
         item.append(minfo);
         mList.append(item);
       }
@@ -1738,6 +2060,17 @@ function renderPttSelect() {
   );
   const key = $('sel-ptt-key').value;
   if (key) voice.pttKey = key;
+  // Gürültü engelleme anahtarı
+  const gurultuSel = $('sel-gurultu');
+  if (gurultuSel) {
+    gurultuSel.value = voice.gurultu ? '1' : '0';
+    gurultuSel.onchange = async () => {
+      voice.gurultu = gurultuSel.value === '1';
+      localStorage.setItem('sohbet.gurultu', voice.gurultu ? '1' : '0');
+      await voice.mod?.setNoiseSuppression?.(voice.gurultu);
+      toast(voice.gurultu ? 'Gürültü engelleme açık' : 'Gürültü engelleme kapalı');
+    };
+  }
   // Hassasiyet kaydırıcısı: yüksek = daha sessiz seste açar.
   const aralik = $('vad-range');
   if (aralik) aralik.value = String(voice.vadEsik);
@@ -2455,6 +2788,8 @@ function updateMeAvatarPreview() {
 
 $('btn-me').addEventListener('click', () => {
   $('me-display').value = state.me.displayName;
+  $('me-status').value = state.me.status || '';
+  $('me-theme').value = localStorage.getItem('sohbet.tema') || 'dark';
   $('me-color').value = state.me.avatarColor || '#5865f2';
   $('me-pass').value = '';
   updateMeAvatarPreview();
@@ -2560,8 +2895,12 @@ $('btn-copy-invite').addEventListener('click', async () => {
 $('btn-me-save').addEventListener('click', async () => {
   const body = {
     displayName: $('me-display').value.trim(),
-    avatarColor: $('me-color').value
+    avatarColor: $('me-color').value,
+    status: $('me-status').value.trim()
   };
+  const tema = $('me-theme').value;
+  localStorage.setItem('sohbet.tema', tema);
+  applyTheme(tema);
   if ($('me-pass').value) body.password = $('me-pass').value;
   try {
     const res = await api(`/api/users/${state.me.id}`, { method: 'PATCH', body });
@@ -2578,6 +2917,46 @@ $('btn-me-save').addEventListener('click', async () => {
     $('me-msg').hidden = false;
   }
 });
+
+/* ==================== TEMALAR ==================== */
+const THEMES = {
+  dark: {
+    '--bg': '#0d0e14', '--bg2': '#12131a', '--bg3': '#1a1c25', '--bg4': '#232633',
+    '--line': '#2a2e3d', '--fg': '#e6e8ef', '--muted': '#8b90a4',
+    '--brand': '#5865f2', '--ok': '#3ba55d', '--warn': '#faa61a', '--danger': '#ed4245', '--self': '#2b3a55'
+  },
+  light: {
+    '--bg': '#f2f3f5', '--bg2': '#ffffff', '--bg3': '#e9eaee', '--bg4': '#dcdde2',
+    '--line': '#d4d6dd', '--fg': '#1a1b22', '--muted': '#5c6070',
+    '--brand': '#5865f2', '--ok': '#2d7d46', '--warn': '#b58105', '--danger': '#d83c3e', '--self': '#dbe4f5'
+  },
+  spiderman: {
+    '--bg': '#0d0e14', '--bg2': '#1a0f14', '--bg3': '#241520', '--bg4': '#301a28',
+    '--line': '#4a1f2e', '--fg': '#f0e6ea', '--muted': '#b08a96',
+    '--brand': '#e23636', '--ok': '#3ba55d', '--warn': '#faa61a', '--danger': '#e23636', '--self': '#3a1a22'
+  },
+  superman: {
+    '--bg': '#0d0e14', '--bg2': '#10141f', '--bg3': '#1a2133', '--bg4': '#232c45',
+    '--line': '#2c3a5e', '--fg': '#e8ecf5', '--muted': '#8fa0c0',
+    '--brand': '#e23b3b', '--ok': '#3ba55d', '--warn': '#f6c945', '--danger': '#e23b3b', '--self': '#2a3550'
+  },
+  deadpool: {
+    '--bg': '#0d0e14', '--bg2': '#160f0f', '--bg3': '#221616', '--bg4': '#2e1c1c',
+    '--line': '#4a2222', '--fg': '#f0e6e6', '--muted': '#b08a8a',
+    '--brand': '#c0392b', '--ok': '#3ba55d', '--warn': '#faa61a', '--danger': '#c0392b', '--self': '#3a1a1a'
+  }
+};
+
+function applyTheme(name) {
+  const theme = THEMES[name] || THEMES.dark;
+  const root = document.documentElement;
+  for (const [key, value] of Object.entries(theme)) root.style.setProperty(key, value);
+  document.body.dataset.theme = name;
+}
+
+(function initTheme() {
+  applyTheme(localStorage.getItem('sohbet.tema') || 'dark');
+})();
 
 $('btn-panel').addEventListener('click', async () => {
   $('screen-panel').hidden = false;

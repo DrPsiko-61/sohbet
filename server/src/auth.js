@@ -72,6 +72,7 @@ export function publicUser(u) {
     displayName: u.display_name,
     avatarColor: u.avatar_color,
     avatarUrl: u.avatar_url || null,
+    status: u.status || null,
     role: isBot ? 'bot' : u.role,
     isBot
   }

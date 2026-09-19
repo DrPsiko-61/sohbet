@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
-<link rel="stylesheet" href="/app.css?v=41">
+<link rel="stylesheet" href="/app.css?v=42">
 </head>
 <body>
 
@@ -110,10 +110,24 @@
 
     <form id="form-send" class="composer">
       <div id="attach-preview" class="attach-preview" hidden></div>
+      <div id="mention-list" class="mention-list" hidden></div>
+      <div id="gif-panel" class="gif-panel" hidden>
+        <div class="gif-head">
+          <input id="gif-search" type="search" placeholder="GIF ara..." maxlength="60">
+          <button id="btn-gif-close" class="icon-btn" type="button" aria-label="GIF panelini kapat">×</button>
+        </div>
+        <div id="gif-grid" class="gif-grid"></div>
+      </div>
       <button id="btn-attach" class="icon-btn" type="button" aria-label="Dosya ekle">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
       </button>
-      <textarea id="in-msg" rows="1" placeholder="Mesaj yaz…" maxlength="4000" enterkeyhint="send"></textarea>
+      <button id="btn-gif" class="icon-btn" type="button" aria-label="GIF ekle" title="GIF ekle">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 10v4M10 10v4M10 12h2.5M15 10v4M15 12h2"/></svg>
+      </button>
+      <button id="btn-voice-msg" class="icon-btn" type="button" aria-label="Sesli mesaj" title="Sesli mesaj kaydet">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></svg>
+      </button>
+      <textarea id="in-msg" rows="1" placeholder="Mesaj yaz..." maxlength="4000" enterkeyhint="send"></textarea>
       <button id="btn-send" class="icon-btn send" type="submit" aria-label="Gönder">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z"/></svg>
       </button>
@@ -198,6 +212,13 @@
           <span>Hassasiyet: <b id="vad-val">Orta</b></span>
           <input id="vad-range" type="range" min="0" max="100" step="5" value="60">
         </label>
+        <label class="field" id="gurultu-field">
+          <span>Gürültü engelleme</span>
+          <select id="sel-gurultu">
+            <option value="1">Açık (önerilen)</option>
+            <option value="0">Kapalı</option>
+          </select>
+        </label>
         <p class="muted">Bas konuş: tuşu basılı tut. Ses algılama: konuşunca otomatik açılır — arka planda (alt+tab) da çalışır. Yalnızca bilgisayarda.</p>
       </div>
       <div id="vs-camera" class="vs-devices" hidden>
@@ -270,6 +291,16 @@
     </div>
 
     <label class="field"><span>Görünen ad</span><input id="me-display" type="text" maxlength="32"></label>
+    <label class="field"><span>Durum mesajı</span><input id="me-status" type="text" maxlength="80" placeholder="Örn: yayında, ders çalışıyorum..."></label>
+    <label class="field"><span>Tema</span>
+      <select id="me-theme">
+        <option value="dark">Karanlık</option>
+        <option value="light">Açık</option>
+        <option value="spiderman">Spider-Man</option>
+        <option value="superman">Superman</option>
+        <option value="deadpool">Deadpool</option>
+      </select>
+    </label>
     <label class="field"><span>Avatar rengi (resim yokken)</span><input id="me-color" type="color"></label>
     <label class="field"><span>Yeni parola (boş bırak = değişmez)</span><input id="me-pass" type="password" minlength="8" autocomplete="new-password"></label>
     <div id="field-invite-code" hidden>
@@ -308,6 +339,6 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="/app.js?v=41" type="module"></script>
+<script src="/app.js?v=42" type="module"></script>
 </body>
 </html>

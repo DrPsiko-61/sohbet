@@ -341,7 +341,7 @@ export async function join(options) {
 
   await room.localParticipant.setMicrophoneEnabled(true, {
     echoCancellation: true,
-    noiseSuppression: true,
+    noiseSuppression: gurultuEngelle,
     autoGainControl: true,
     channelCount: 1
   });
@@ -898,7 +898,7 @@ export async function toggleMic() {
   try {
     await room.localParticipant.setMicrophoneEnabled(next, {
       echoCancellation: true,
-      noiseSuppression: true,
+      noiseSuppression: gurultuEngelle,
       autoGainControl: true,
       channelCount: 1
     });
@@ -907,6 +907,29 @@ export async function toggleMic() {
   } catch (error) {
     onError('Mikrofon değiştirilemedi: ' + (error.message || ''));
   }
+}
+
+let gurultuEngelle = true;
+
+/// Gurultu engelleme acik/kapali. Tarayicinin yerlesik gurultu engelleme
+/// (RNNoise) ozelligi mikrofon constraint'i ile acilir/kapatilir; mikrofon
+/// yeniden baslatilir.
+export async function setNoiseSuppression(enabled) {
+  gurultuEngelle = Boolean(enabled);
+  if (!room || !room.localParticipant.isMicrophoneEnabled) return gurultuEngelle;
+  try {
+    await room.localParticipant.setMicrophoneEnabled(false);
+    await room.localParticipant.setMicrophoneEnabled(true, {
+      echoCancellation: true,
+      noiseSuppression: gurultuEngelle,
+      autoGainControl: true,
+      channelCount: 1
+    });
+    emit({ mic: true });
+  } catch (error) {
+    onError('Gürültü engelleme değiştirilemedi: ' + (error.message || ''));
+  }
+  return gurultuEngelle;
 }
 
 /// Bas konus modunu acar/kapatir. Acildiginda mikrofon kapanir; tus basili
@@ -937,7 +960,7 @@ export async function setPttHolding(holding) {
   try {
     await room.localParticipant.setMicrophoneEnabled(next, {
       echoCancellation: true,
-      noiseSuppression: true,
+      noiseSuppression: gurultuEngelle,
       autoGainControl: true,
       channelCount: 1
     });
