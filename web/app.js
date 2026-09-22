@@ -1483,6 +1483,7 @@ const voiceDom = {
   rows: new Map(),
   tiles: new Map(),
   maximized: null,
+  pipUserId: null,
   deviceBusy: false
 };
 
@@ -1519,6 +1520,7 @@ function renderVoice() {
   renderSidePeople(participants, activeSpeakers);
   renderMembersSide();
   renderStage(participants);
+  renderPip();
   applySavedVolumes(participants);
   videoTasarrufuUygula();
 
@@ -1882,6 +1884,66 @@ function renderStage(participants) {
   stage.hidden = want.length === 0;
 }
 
+/* ==================== PIP KAMERA (ekran paylaşımı tam ekrandayken) ==================== */
+/// Ekran paylaşımı büyütülmüşken sağ üstte küçük kamera penceresi gösterilir.
+/// Kamerası açık olan konuşan biri varsa onun kamerası; kimse konuşmuyorsa
+/// kamerası açık olanlar arasından rastgele (5 sn'de bir değişen) kamera.
+function pipAdaylar(participants) {
+  return participants.filter((p) => (p.userId === state.me.id ? voice.cam : p.video));
+}
+
+function renderPip() {
+  const pip = $('pip-cam');
+  if (!pip) return;
+  const maxKey = voiceDom.maximized;
+  const ekranMax = maxKey && String(maxKey).startsWith('screen-');
+  if (!ekranMax) {
+    pip.hidden = true;
+    voiceDom.pipUserId = null;
+    voice.mod?.detachPip?.();
+    return;
+  }
+  const participants = state.voice[voice.channelId] || [];
+  const adaylar = pipAdaylar(participants);
+  if (!adaylar.length) {
+    pip.hidden = true;
+    voiceDom.pipUserId = null;
+    voice.mod?.detachPip?.();
+    return;
+  }
+  const konusanlar = new Set((voice.activeSpeakers || []).map(String));
+  const konusanAday = adaylar.find((p) => konusanlar.has(String(p.userId)));
+  const secilen = konusanAday ? konusanAday.userId : (voiceDom.pipUserId || adaylar[0].userId);
+  if (voiceDom.pipUserId !== secilen) {
+    voiceDom.pipUserId = secilen;
+    voice.mod?.detachPip?.();
+    voice.mod?.attachPip?.(secilen);
+    const user = state.users.get(secilen);
+    const nameEl = $('pip-name');
+    if (nameEl) nameEl.textContent = user?.displayName || '';
+  }
+  pip.hidden = false;
+}
+
+/// Kimse konuşmuyorken kamerası açık olanlar arasında rastgele döner.
+setInterval(() => {
+  if (!voiceDom.maximized || !String(voiceDom.maximized).startsWith('screen-')) return;
+  const participants = state.voice[voice.channelId] || [];
+  const adaylar = pipAdaylar(participants);
+  if (!adaylar.length) return;
+  const konusanlar = new Set((voice.activeSpeakers || []).map(String));
+  if (adaylar.some((p) => konusanlar.has(String(p.userId)))) return;
+  const secilen = adaylar[Math.floor(Math.random() * adaylar.length)].userId;
+  if (secilen !== voiceDom.pipUserId) {
+    voiceDom.pipUserId = secilen;
+    voice.mod?.detachPip?.();
+    voice.mod?.attachPip?.(secilen);
+    const user = state.users.get(secilen);
+    const nameEl = $('pip-name');
+    if (nameEl) nameEl.textContent = user?.displayName || '';
+  }
+}, 5000);
+
 /// Ekran paylaşımı görüntü oranı (izleyene özel, tarayıcıda saklanır):
 /// 'contain' sigidir (serit olabilir), 'cover' doldurur (kenarlardan kırpar,
 /// serit kalmaz), 'auto' gerçek boyut. Varsayilan: doldur -> siyah serit yok.
@@ -1945,9 +2007,14 @@ function videoTasarrufuUygula() {
     return;
   }
   const [tur, id] = String(voiceDom.maximized).split('-');
-  // Ekran paylaşımı büyütülmüşse hiçbir kamera inmez; kamera büyütülmüşse
-  // yalnızca o kişinin kamerası iner. (Anahtar biçimi: cam-{id} / screen-{id})
-  mod.setVisibleCameras(tur === 'cam' ? [id] : []);
+  // Kamera büyütülmüşse yalnızca o kişinin kamerası iner.
+  if (tur === 'cam') {
+    mod.setVisibleCameras([id]);
+    return;
+  }
+  // Ekran paylaşımı büyütülmüş: PIP'te gösterilen kullanıcının kamerası iner,
+  // diğerleri durur. (Anahtar biçimi: cam-{id} / screen-{id})
+  mod.setVisibleCameras(voiceDom.pipUserId ? [String(voiceDom.pipUserId)] : []);
 }
 
 /// Kayıtlı kişi ses seviyelerini yeni katılımcılara uygular (bir kez).
@@ -1983,6 +2050,7 @@ function toggleMaximize(key) {
   } else {
     filmModuKapat();
   }
+  renderPip();
   // Görünmeyen kameraların indirilmesini durdur (veri tasarrufu).
   videoTasarrufuUygula();
   // Tam ekran ISTEGI KUTUYA degil, dokumanin kendisine yapilir: bir bilesen
@@ -2010,6 +2078,7 @@ function filmModuKapat() {
     cside.acik = window.matchMedia('(min-width:820px)').matches;
     chatSideCiz();
   }
+  renderPip();
   // Film modundan çıkıldı: duraklatılan kameralar yeniden indirilir.
   videoTasarrufuUygula();
 }

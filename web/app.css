@@ -388,6 +388,11 @@ body.film-modu .chat-side[hidden]{display:none}
 body.film-modu .tile.max{right:25%;width:75%;inset:0 auto 0 0}
 body.film-modu .tile.max.fit-cover video{width:100%;height:100%}
 
+/* ---------- PIP kamera (ekran paylaşımı tam ekrandayken sağ üst) ---------- */
+.pip-cam{position:fixed;right:calc(25% + 14px);top:calc(12px + var(--st));z-index:210;width:220px;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden;border:2px solid rgba(255,255,255,.18);box-shadow:0 6px 24px rgba(0,0,0,.5);pointer-events:none}
+.pip-cam video{width:100%;height:100%;object-fit:cover;display:block}
+.pip-name{position:absolute;left:6px;bottom:6px;background:rgba(0,0,0,.65);color:#fff;font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;max-width:calc(100% - 12px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
 @media (max-width:819px){
   /* Sağ yan paneller mobilde tam ekran sayfa gibi açılır; gizli başlar. */
   .chat-side,.voice-side,.members-side{position:fixed;inset:0;width:100%;z-index:50;background:var(--bg);border-left:0;padding-top:calc(8px + var(--st))}
@@ -398,6 +403,7 @@ body.film-modu .tile.max.fit-cover video{width:100%;height:100%}
   /* Film modunda (telefon yataydayken) panel sağda sabitlenir: 3:1. */
   body.film-modu .chat-side{position:fixed;top:0;right:0;bottom:0;left:auto;width:25vw;z-index:201;padding:8px 10px;background:rgba(15,15,20,.96);border-left:1px solid rgba(255,255,255,.12)}
   body.film-modu .tile.max{right:25vw;width:75vw}
+  .pip-cam{right:calc(25vw + 8px);top:calc(8px + var(--st));width:150px}
   body.film-modu .chat-side .side-head{margin-bottom:6px}
   body.film-modu .chat-side .field{margin-bottom:6px}
   body.film-modu .chat-side .field>span{font-size:10px;margin-bottom:2px}

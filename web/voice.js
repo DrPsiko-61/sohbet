@@ -775,6 +775,40 @@ export function attachTracks() {
   }
 }
 
+/// Ekran paylasimi tam ekrandayken sag ustte gorunen kucuk kamera penceresi
+/// (PIP). Secilen kullanicinin kamera yayini bu kutuya baglanir; ayni yayin
+/// normal kutusunda da akmaya devam eder (LiveKit ayni track'i birden fazla
+/// elemente baglayabilir).
+export function attachPip(userId) {
+  const key = String(userId);
+  const entry = pendingTracks.get(key);
+  const track = entry?.camera;
+  const pip = document.getElementById('pip-cam');
+  if (!pip || !track) return;
+  let node = pip.querySelector('video');
+  if (node && track.attachedElements?.includes?.(node)) return;
+  try {
+    node = track.attach(node || undefined);
+  } catch {
+    return;
+  }
+  node.playsInline = true;
+  node.autoplay = true;
+  node.muted = true;
+  if (!node.parentElement) pip.prepend(node);
+}
+
+/// PIP kutusundaki videoyu kaldirir (yayin durmaz, yalnizca baglanti kesilir).
+export function detachPip() {
+  const pip = document.getElementById('pip-cam');
+  if (!pip) return;
+  const node = pip.querySelector('video');
+  if (node) {
+    try { node.srcObject = null; } catch {}
+    node.remove();
+  }
+}
+
 function syncVoiceState() {
   if (!room) return;
   const users = [];
