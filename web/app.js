@@ -1895,20 +1895,22 @@ function pipAdaylar(participants) {
 function renderPip() {
   const pip = $('pip-cam');
   if (!pip) return;
+  const kapat = () => {
+    pip.hidden = true;
+    document.body.classList.remove('pip-acik');
+    voiceDom.pipUserId = null;
+    voice.mod?.detachPip?.();
+  };
   const maxKey = voiceDom.maximized;
   const ekranMax = maxKey && String(maxKey).startsWith('screen-');
   if (!ekranMax) {
-    pip.hidden = true;
-    voiceDom.pipUserId = null;
-    voice.mod?.detachPip?.();
+    kapat();
     return;
   }
   const participants = state.voice[voice.channelId] || [];
   const adaylar = pipAdaylar(participants);
   if (!adaylar.length) {
-    pip.hidden = true;
-    voiceDom.pipUserId = null;
-    voice.mod?.detachPip?.();
+    kapat();
     return;
   }
   const konusanlar = new Set((voice.activeSpeakers || []).map(String));
@@ -1923,6 +1925,7 @@ function renderPip() {
     if (nameEl) nameEl.textContent = user?.displayName || '';
   }
   pip.hidden = false;
+  document.body.classList.add('pip-acik');
 }
 
 /// Kimse konuşmuyorken kamerası açık olanlar arasında rastgele döner.
