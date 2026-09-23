@@ -69,6 +69,11 @@ const CAMERA_QUALITIES = {
 const CAMERA_QUALITY_DEFAULT = 'tam';
 
 let cameraQuality = CAMERA_QUALITY_DEFAULT;
+// Kalite degisimi surerken yeni istekler bekletilir; restartTrack cagrilari
+// birbirine girmesin diye (hizli ardisik degisimde kamera bozuluyordu).
+let cameraQualityChanging = false;
+// Degisim surerken gelen en son kalite istegi; istek bitince uygulanir.
+let cameraQualityPending = null;
 // Flaş yalnizca bazi (genelde arka) kameralarda vardir; durum burada tutulur.
 let torchOn = false;
 
@@ -1254,20 +1259,26 @@ export async function toggleTorch() {
 }
 
 /// Kamera kalitesini degistirir. Kamera acikken yayin KESILMEDEN uygulanir:
-/// iz yeniden baslatilir, ayni yayin yeni cozunurlukle devam eder.
+/// iz yeniden baslatilir, ayni yayin yeni cozunurlukle devam eder. Hizli
+/// ardisik degisimde restartTrack cagrilari birbirine girmesin diye surumdeki
+/// istek bitmeden yenisi baslamaz; bu sirada gelen en son istek kuyruga alinir.
 export async function setCameraQuality(key) {
   if (!CAMERA_QUALITIES[key]) return false;
-  cameraQuality = key;
-  const preset = CAMERA_QUALITIES[key];
-
-  const publication = room ? pubFor(room.localParticipant, lib.Track.Source.Camera) : null;
-  const track = publication?.track || publication?.videoTrack;
-  if (!track || typeof track.restartTrack !== 'function') {
-    // Kamera kapali: secim bir sonraki acilista uygulanir.
+  if (cameraQualityChanging) {
+    cameraQualityPending = key;
     return true;
   }
-
+  cameraQualityChanging = true;
+  cameraQuality = key;
+  const preset = CAMERA_QUALITIES[key];
   try {
+    const publication = room ? pubFor(room.localParticipant, lib.Track.Source.Camera) : null;
+    const track = publication?.track || publication?.videoTrack;
+    if (!track || typeof track.restartTrack !== 'function') {
+      // Kamera kapali: secim bir sonraki acilista uygulanir.
+      return true;
+    }
+
     const options = {
       resolution: { width: preset.width, height: preset.height },
       frameRate: preset.frameRate
@@ -1283,6 +1294,11 @@ export async function setCameraQuality(key) {
   } catch (error) {
     onError('Kamera kalitesi değiştirilemedi: ' + (error.message || ''));
     return false;
+  } finally {
+    cameraQualityChanging = false;
+    const pending = cameraQualityPending;
+    cameraQualityPending = null;
+    if (pending && pending !== key) setCameraQuality(pending);
   }
 }
 
