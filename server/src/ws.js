@@ -337,13 +337,36 @@ export function createHub(server) {
           if (!points.length) return
           const stroke = {
             id: typeof msg.stroke?.id === 'string' && msg.stroke.id ? msg.stroke.id : `${user.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            userId: user.id,
             color: typeof msg.stroke?.color === 'string' ? msg.stroke.color : '#3b82f6',
             width: Math.min(40, Math.max(1, Number(msg.stroke?.width) || 4)),
+            eraser: Boolean(msg.stroke?.eraser),
             points
           }
           room.strokes.push(stroke)
           if (room.strokes.length > DRAW_STROKE_LIMIT) room.strokes.splice(0, room.strokes.length - DRAW_STROKE_LIMIT)
           sendDraw(Number(msg.channelId), { op: 'draw_stroke', channelId: Number(msg.channelId), stroke })
+          break
+        }
+        case 'draw_undo': {
+          const room = draw.get(Number(msg.channelId))
+          if (!room || !room.users.has(user.id)) return
+          const strokeId = typeof msg.strokeId === 'string' ? msg.strokeId : ''
+          if (!strokeId) return
+          const index = room.strokes.findIndex((s) => s.id === strokeId)
+          // Yalnizca kendi vurusu geri alinabilir; baskasinin vurusuna dokunulmaz.
+          if (index < 0 || room.strokes[index].userId !== user.id) return
+          room.strokes.splice(index, 1)
+          sendDraw(Number(msg.channelId), { op: 'draw_undo', channelId: Number(msg.channelId), strokeId })
+          break
+        }
+        case 'draw_color': {
+          const room = draw.get(Number(msg.channelId))
+          if (!room || !room.users.has(user.id)) return
+          const color = typeof msg.color === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(msg.color) ? msg.color : null
+          if (!color) return
+          room.users.get(user.id).color = color
+          sendDraw(Number(msg.channelId), { op: 'draw_users', channelId: Number(msg.channelId), users: drawUsers(room) })
           break
         }
         case 'draw_clear': {

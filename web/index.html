@@ -352,8 +352,12 @@
     </div>
     <div class="ciz-toolbar">
       <div id="ciz-renkler" class="ciz-renkler" role="radiogroup" aria-label="Renk seç"></div>
+      <input id="ciz-renk-sec" class="ciz-renk-sec" type="color" value="#3b82f6" title="İstediğin rengi seç" aria-label="İstediğin rengi seç">
       <label class="ciz-firca"><span>Fırça</span><input id="ciz-firca" type="range" min="1" max="20" step="1" value="4"></label>
+      <button id="btn-ciz-silgi" class="vbtn" type="button" title="Silgi (kendi çizimini siler)"><span>🧽 Silgi</span></button>
+      <button id="btn-ciz-geri" class="vbtn" type="button" title="Kendi son çizimini geri al"><span>↩ Geri al</span></button>
       <button id="btn-ciz-temizle" class="vbtn" type="button"><span>Temizle</span></button>
+      <button id="btn-ciz-kaydet" class="vbtn" type="button" title="PNG olarak genel kanala kaydet"><span>💾 Kaydet</span></button>
       <button id="btn-ciz-ayril" class="vbtn danger" type="button"><span>Ayrıl</span></button>
     </div>
     <div class="ciz-board-wrap">
@@ -365,6 +369,6 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="/app.js?v=47" type="module"></script>
+<script src="/app.js?v=48" type="module"></script>
 </body>
 </html>

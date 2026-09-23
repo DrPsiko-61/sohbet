@@ -76,6 +76,7 @@ const ciz = {
   kanal: null,
   renk: '',
   firca: 4,
+  silgi: false,
   katilimcilar: [],
   strokes: [],
   ciziyor: false,
@@ -1371,6 +1372,15 @@ function handleSocket(msg) {
       if (Number(msg.channelId) !== ciz.kanal) break;
       ciz.strokes = [];
       cizYenidenCiz();
+      break;
+    }
+    case 'draw_undo': {
+      if (Number(msg.channelId) !== ciz.kanal) break;
+      const index = ciz.strokes.findIndex((s) => s.id === msg.strokeId);
+      if (index >= 0) {
+        ciz.strokes.splice(index, 1);
+        cizYenidenCiz();
+      }
       break;
     }
     case 'draw_full':
@@ -3387,11 +3397,13 @@ function cizKapat() {
   ciz.acik = false;
   ciz.kanal = null;
   ciz.renk = '';
+  ciz.silgi = false;
   ciz.strokes = [];
   ciz.katilimcilar = [];
   ciz.ciziyor = false;
   ciz.aktif = null;
   ciz.ctx = null;
+  $('btn-ciz-silgi')?.classList.remove('on');
   $('screen-ciz').hidden = true;
 }
 
@@ -3402,7 +3414,14 @@ function cizCiz(stroke) {
   const W = canvas.width;
   const H = canvas.height;
   const pts = stroke.points;
-  ctx.strokeStyle = stroke.color;
+  ctx.save();
+  if (stroke.eraser) {
+    // Silgi: pikseli saydam yapar; beyaz zemin arkadan görünür.
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.strokeStyle = 'rgba(0,0,0,1)';
+  } else {
+    ctx.strokeStyle = stroke.color;
+  }
   ctx.lineWidth = stroke.width;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
@@ -3410,6 +3429,7 @@ function cizCiz(stroke) {
   ctx.moveTo(pts[0][0] * W, pts[0][1] * H);
   for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0] * W, pts[i][1] * H);
   ctx.stroke();
+  ctx.restore();
 }
 
 function cizYenidenCiz() {
@@ -3442,8 +3462,9 @@ function cizNokta(event) {
   ];
 }
 
-/// Renk paleti: herkes kendi rengiyle çizer; sunucu rengi atayınca
-/// (draw_state) yalnızca o renk seçilebilir kalır.
+/// Renk paleti: herkes istedigi rengi secer; secim sunucuya bildirilir ve
+/// katilimci listesindeki nokta da o renge doner. Ayrica ozel renk secici
+/// (ciz-renk-sec) ile istenen herhangi bir renk kullanilabilir.
 function cizRenkPaleti() {
   const kutu = $('ciz-renkler');
   kutu.innerHTML = '';
@@ -3453,9 +3474,9 @@ function cizRenkPaleti() {
     btn.style.background = renk;
     btn.setAttribute('aria-label', `Renk ${renk}`);
     btn.addEventListener('click', () => {
-      if (ciz.renk && ciz.renk !== renk) return;
       ciz.renk = renk;
       cizRenkSec();
+      cizRenkGonder();
     });
     kutu.append(btn);
   }
@@ -3464,10 +3485,15 @@ function cizRenkPaleti() {
 function cizRenkSec() {
   const kutu = $('ciz-renkler');
   kutu.querySelectorAll('.ciz-renk').forEach((b) => {
-    const on = b.style.background === ciz.renk;
-    b.classList.toggle('on', on);
-    b.disabled = Boolean(ciz.renk) && !on;
+    b.classList.toggle('on', b.style.background === ciz.renk);
   });
+  const sec = $('ciz-renk-sec');
+  if (sec && /^#[0-9a-f]{6}$/i.test(ciz.renk)) sec.value = ciz.renk;
+}
+
+function cizRenkGonder() {
+  if (!ciz.acik || !ciz.renk) return;
+  cizGonder({ op: 'draw_color', channelId: ciz.kanal, color: ciz.renk });
 }
 
 function cizBagla() {
@@ -3479,8 +3505,9 @@ function cizBagla() {
     ciz.son = cizNokta(event);
     ciz.aktif = {
       id: `${state.me?.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      color: ciz.renk,
-      width: ciz.firca,
+      color: ciz.silgi ? '#ffffff' : ciz.renk,
+      width: ciz.silgi ? ciz.firca * 3 : ciz.firca,
+      eraser: ciz.silgi,
       points: [ciz.son]
     };
   });
@@ -3495,7 +3522,13 @@ function cizBagla() {
     const ctx = ciz.ctx;
     const W = canvas.width;
     const H = canvas.height;
-    ctx.strokeStyle = ciz.aktif.color;
+    ctx.save();
+    if (ciz.aktif.eraser) {
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.strokeStyle = 'rgba(0,0,0,1)';
+    } else {
+      ctx.strokeStyle = ciz.aktif.color;
+    }
     ctx.lineWidth = ciz.aktif.width;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -3503,6 +3536,7 @@ function cizBagla() {
     ctx.moveTo(onceki[0] * W, onceki[1] * H);
     ctx.lineTo(p[0] * W, p[1] * H);
     ctx.stroke();
+    ctx.restore();
   });
   const bitir = () => {
     if (!ciz.ciziyor) return;
@@ -3525,8 +3559,67 @@ $('btn-ciz-temizle').addEventListener('click', () => {
   if (!ciz.acik) return;
   cizGonder({ op: 'draw_clear', channelId: ciz.kanal });
 });
+$('btn-ciz-silgi').addEventListener('click', () => {
+  if (!ciz.acik) return;
+  ciz.silgi = !ciz.silgi;
+  $('btn-ciz-silgi').classList.toggle('on', ciz.silgi);
+});
+$('btn-ciz-geri').addEventListener('click', () => {
+  if (!ciz.acik) return;
+  const benim = [...ciz.strokes].reverse().find((s) => s.userId === state.me?.id);
+  if (!benim) {
+    toast('Geri alınacak kendi çizimin yok');
+    return;
+  }
+  cizGonder({ op: 'draw_undo', channelId: ciz.kanal, strokeId: benim.id });
+});
+$('btn-ciz-kaydet').addEventListener('click', async () => {
+  if (!ciz.acik) return;
+  const canvas = $('ciz-canvas');
+  // Silgi saydam piksel birakir; kayitta beyaz zemin uzerine oturtulur.
+  const duz = document.createElement('canvas');
+  duz.width = canvas.width;
+  duz.height = canvas.height;
+  const dctx = duz.getContext('2d');
+  dctx.fillStyle = '#ffffff';
+  dctx.fillRect(0, 0, duz.width, duz.height);
+  dctx.drawImage(canvas, 0, 0);
+  const blob = await new Promise((resolve) => duz.toBlob(resolve, 'image/png'));
+  if (!blob) {
+    toast('PNG oluşturulamadı');
+    return;
+  }
+  const kanallar = state.servers.flatMap((s) => s.channels || []);
+  const hedef = kanallar.find((c) => c.type === 'text' && c.name.toLowerCase() === 'genel')
+    || kanallar.find((c) => c.type === 'text');
+  if (!hedef) {
+    toast('Genel kanal bulunamadı');
+    return;
+  }
+  try {
+    const res = await fetch(`/api/channels/${hedef.id}/upload?name=${encodeURIComponent(`cizim-${Date.now()}.png`)}&mime=image/png`, {
+      method: 'POST',
+      body: blob,
+      credentials: 'same-origin'
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'upload_failed');
+    await api(`/api/channels/${hedef.id}/messages`, {
+      method: 'POST',
+      body: { content: '🖼️ Çizim tahtası kaydı', attachmentIds: [data.attachment.id] }
+    });
+    toast(`#${hedef.name} kanalına PNG olarak kaydedildi`);
+  } catch (error) {
+    toast(tr(error.message, 'Kaydedilemedi'));
+  }
+});
 $('ciz-firca').addEventListener('input', (event) => {
   ciz.firca = Number(event.target.value);
+});
+$('ciz-renk-sec').addEventListener('input', (event) => {
+  ciz.renk = event.target.value;
+  cizRenkSec();
+  cizRenkGonder();
 });
 cizRenkPaleti();
 cizBagla();

@@ -389,6 +389,13 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 }
 .ciz-renk.on{border-color:#fff;transform:scale(1.12)}
 .ciz-renk:disabled{opacity:.35;cursor:default;transform:none}
+.ciz-renk-sec{
+  width:34px;height:34px;padding:0;border:2px solid var(--line);border-radius:50%;
+  background:var(--bg3);cursor:pointer;flex:none;overflow:hidden;
+}
+.ciz-renk-sec::-webkit-color-swatch-wrapper{padding:2px}
+.ciz-renk-sec::-webkit-color-swatch{border:none;border-radius:50%}
+.ciz-renk-sec::-moz-color-swatch{border:none;border-radius:50%}
 .ciz-firca{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
 .ciz-firca input{width:110px;accent-color:var(--brand)}
 .ciz-toolbar .vbtn{flex:0 0 auto;min-width:76px}
