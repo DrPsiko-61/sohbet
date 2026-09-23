@@ -135,7 +135,12 @@
     </form>
 
     <button id="vs-resize" class="resize-handle" type="button" aria-label="Görüntü kutusunu büyüt veya küçült" hidden></button>
-    <div id="vs-stage" class="stage" hidden></div>
+    <div id="vs-stage" class="stage" hidden>
+      <button id="btn-ciz" class="ciz-btn" type="button" title="Ortak çizim tahtası">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+        <span>Çiz</span>
+      </button>
+    </div>
     <div id="pip-cam" class="pip-cam" hidden>
       <span id="pip-name" class="pip-name"></span>
     </div>
@@ -339,8 +344,31 @@
   </div>
 </section>
 
+<!-- ==================== ORTAK ÇİZİM TAHTASI ==================== -->
+<section id="screen-ciz" class="screen sheet" hidden>
+  <div class="sheet-card ciz-card">
+    <div class="ciz-head">
+      <h2>Çizim Tahtası</h2>
+      <span id="ciz-count" class="muted"></span>
+      <button id="btn-ciz-close" class="icon-btn" type="button" aria-label="Çizim tahtasını kapat" title="Kapat">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+      </button>
+    </div>
+    <div class="ciz-toolbar">
+      <div id="ciz-renkler" class="ciz-renkler" role="radiogroup" aria-label="Renk seç"></div>
+      <label class="ciz-firca"><span>Fırça</span><input id="ciz-firca" type="range" min="1" max="20" step="1" value="4"></label>
+      <button id="btn-ciz-temizle" class="vbtn" type="button"><span>Temizle</span></button>
+      <button id="btn-ciz-ayril" class="vbtn danger" type="button"><span>Ayrıl</span></button>
+    </div>
+    <div class="ciz-board-wrap">
+      <canvas id="ciz-canvas" width="1200" height="720"></canvas>
+    </div>
+    <div id="ciz-katilimcilar" class="ciz-katilimcilar"></div>
+  </div>
+</section>
+
 <div id="toast" class="toast" hidden></div>
 
-<script src="/app.js?v=44" type="module"></script>
+<script src="/app.js?v=46" type="module"></script>
 </body>
 </html>

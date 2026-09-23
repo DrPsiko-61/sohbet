@@ -1,6 +1,6 @@
 ﻿/* Servis calisani: varlik onbellegi -> tekrar ziyaretlerde indirme ~0 */
 
-const VERSION = 'v45';
+const VERSION = 'v46';
 const SHELL = `shell-${VERSION}`;
 const RUNTIME = `runtime-${VERSION}`;
 

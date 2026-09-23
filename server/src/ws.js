@@ -127,6 +127,7 @@ export function createHub(server) {
       }
       case 'room_finished':
         users.clear()
+        draw.delete(channelId)
         break
       default:
         return
@@ -146,6 +147,7 @@ export function createHub(server) {
 
   function dropVoiceChannel(channelId) {
     if (voice.delete(channelId)) pushVoice(channelId)
+    draw.delete(channelId)
   }
 
   function kickUser(userId) {
@@ -159,6 +161,51 @@ export function createHub(server) {
       }
     }
     clearVoiceUser(userId)
+  }
+
+  // --- Ortak çizim tahtası (oyun) ---
+  // Her sesli kanalda en fazla 10 kişinin aynı tahtaya çizdiği oda.
+  // Noktalar 0..1 aralığında normalleştirilir; herkes kendi ekran boyutunda
+  // aynı çizimi görür. Renkler katılım sırasına göre paletten atanır.
+  const draw = new Map() // channelId -> { strokes: [], users: Map<userId, { color, name }> }
+  const DRAW_RENKLER = ['#ef4444', '#f97316', '#facc15', '#22c55e', '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899', '#a855f7', '#0ea5e9']
+  const DRAW_MAX = 10
+  const DRAW_STROKE_LIMIT = 3000
+  const DRAW_POINT_LIMIT = 500
+
+  function drawRoom(channelId) {
+    let room = draw.get(channelId)
+    if (!room) {
+      room = { strokes: [], users: new Map() }
+      draw.set(channelId, room)
+    }
+    return room
+  }
+
+  function drawUsers(room) {
+    return [...room.users.entries()].map(([userId, u]) => ({ userId, color: u.color, name: u.name }))
+  }
+
+  function sendDraw(channelId, message) {
+    const room = draw.get(channelId)
+    if (!room) return
+    const data = JSON.stringify(message)
+    for (const userId of room.users.keys()) {
+      const sockets = clients.get(userId)
+      if (!sockets) continue
+      for (const ws of sockets) {
+        if (ws.readyState === ws.OPEN) ws.send(data)
+      }
+    }
+  }
+
+  function leaveDraw(userId, channelId) {
+    const room = draw.get(channelId)
+    if (!room) return
+    if (room.users.delete(userId)) {
+      sendDraw(channelId, { op: 'draw_users', channelId, users: drawUsers(room) })
+      if (!room.users.size) draw.delete(channelId)
+    }
   }
 
   wss.on('connection', (ws, req) => {
@@ -214,6 +261,7 @@ export function createHub(server) {
           if (currentChannel && currentChannel !== channel.id) {
             const prev = voice.get(currentChannel)
             if (prev && prev.delete(user.id)) pushVoice(currentChannel)
+            leaveDraw(user.id, currentChannel)
           }
           currentChannel = channel.id
           const users = voice.get(channel.id) || new Map()
@@ -242,6 +290,7 @@ export function createHub(server) {
           const users = voice.get(channelId)
           if (users && users.delete(user.id)) pushVoice(channelId)
           if (currentChannel === channelId) currentChannel = null
+          leaveDraw(user.id, channelId)
           break
         }
         case 'typing': {
@@ -254,6 +303,54 @@ export function createHub(server) {
             if (!sockets) continue
             for (const s of sockets) if (s.readyState === s.OPEN) s.send(data)
           }
+          break
+        }
+        case 'draw_join': {
+          const channel = canSee(Number(msg.channelId), user.id)
+          if (!channel || channel.type !== 'voice') return
+          if (!voice.get(channel.id)?.has(user.id)) return
+          const room = drawRoom(channel.id)
+          if (room.users.has(user.id)) return
+          if (room.users.size >= DRAW_MAX) {
+            ws.send(JSON.stringify({ op: 'draw_full', channelId: channel.id }))
+            return
+          }
+          const used = new Set([...room.users.values()].map((u) => u.color))
+          const color = DRAW_RENKLER.find((c) => !used.has(c)) || DRAW_RENKLER[room.users.size % DRAW_RENKLER.length]
+          room.users.set(user.id, { color, name: user.display_name })
+          ws.send(JSON.stringify({ op: 'draw_state', channelId: channel.id, strokes: room.strokes, users: drawUsers(room), me: color }))
+          sendDraw(channel.id, { op: 'draw_users', channelId: channel.id, users: drawUsers(room) })
+          break
+        }
+        case 'draw_leave': {
+          leaveDraw(user.id, Number(msg.channelId))
+          break
+        }
+        case 'draw_stroke': {
+          const room = draw.get(Number(msg.channelId))
+          if (!room || !room.users.has(user.id)) return
+          const raw = Array.isArray(msg.stroke?.points) ? msg.stroke.points : []
+          const points = raw
+            .slice(0, DRAW_POINT_LIMIT)
+            .map((p) => [Number(p?.[0]), Number(p?.[1])])
+            .filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]) && p[0] >= 0 && p[0] <= 1 && p[1] >= 0 && p[1] <= 1)
+          if (!points.length) return
+          const stroke = {
+            id: typeof msg.stroke?.id === 'string' && msg.stroke.id ? msg.stroke.id : `${user.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            color: typeof msg.stroke?.color === 'string' ? msg.stroke.color : '#3b82f6',
+            width: Math.min(40, Math.max(1, Number(msg.stroke?.width) || 4)),
+            points
+          }
+          room.strokes.push(stroke)
+          if (room.strokes.length > DRAW_STROKE_LIMIT) room.strokes.splice(0, room.strokes.length - DRAW_STROKE_LIMIT)
+          sendDraw(Number(msg.channelId), { op: 'draw_stroke', channelId: Number(msg.channelId), stroke })
+          break
+        }
+        case 'draw_clear': {
+          const room = draw.get(Number(msg.channelId))
+          if (!room || !room.users.has(user.id)) return
+          room.strokes = []
+          sendDraw(Number(msg.channelId), { op: 'draw_clear', channelId: Number(msg.channelId) })
           break
         }
         default:
@@ -275,7 +372,12 @@ export function createHub(server) {
         if (users && users.delete(user.id)) pushVoice(currentChannel)
         currentChannel = null
       }
-      if (user) seen.set(user.id, Date.now())
+      if (user) {
+        for (const cid of [...draw.keys()]) {
+          if (draw.get(cid)?.users.has(user.id)) leaveDraw(user.id, cid)
+        }
+        seen.set(user.id, Date.now())
+      }
     })
 
     ws.on('error', () => {})

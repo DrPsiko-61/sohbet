@@ -69,6 +69,21 @@ const voice = {
   sagir: false
 };
 
+// Ortak çizim tahtası (oyun) durumu. Renkler sunucudan atanır; noktalar 0..1.
+const DRAW_RENKLER = ['#ef4444', '#f97316', '#facc15', '#22c55e', '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899', '#a855f7', '#0ea5e9'];
+const ciz = {
+  acik: false,
+  kanal: null,
+  renk: '',
+  firca: 4,
+  katilimcilar: [],
+  strokes: [],
+  ciziyor: false,
+  aktif: null,
+  son: null,
+  ctx: null
+};
+
 const $ = (id) => document.getElementById(id);
 // Bas konuş klavye gerektirir: yalnızca fareli/klavyeli cihazlarda sunulur.
 const masaustu = typeof window !== 'undefined' &&
@@ -1228,6 +1243,7 @@ function connectSocket() {
 
   socket.addEventListener('close', (event) => {
     setNet('off');
+    if (ciz.acik) cizKapat();
     if (event.code === 4001 || event.code === 4003) {
       toast('Bu oturum kapatıldı');
       setTimeout(() => location.reload(), 1200);
@@ -1326,6 +1342,41 @@ function handleSocket(msg) {
       toast('Bir yönetici seni attı');
       setTimeout(() => location.reload(), 1500);
       break;
+    case 'draw_state': {
+      if (Number(msg.channelId) !== ciz.kanal) break;
+      ciz.renk = msg.me || ciz.renk;
+      ciz.strokes = Array.isArray(msg.strokes) ? msg.strokes : [];
+      ciz.katilimcilar = Array.isArray(msg.users) ? msg.users : [];
+      cizYenidenCiz();
+      cizKatilimciListesi();
+      cizRenkSec();
+      break;
+    }
+    case 'draw_users': {
+      if (Number(msg.channelId) !== ciz.kanal) break;
+      ciz.katilimcilar = Array.isArray(msg.users) ? msg.users : [];
+      cizKatilimciListesi();
+      break;
+    }
+    case 'draw_stroke': {
+      if (Number(msg.channelId) !== ciz.kanal) break;
+      const stroke = msg.stroke;
+      if (!stroke || !Array.isArray(stroke.points) || !stroke.points.length) break;
+      if (ciz.strokes.some((s) => s.id === stroke.id)) break;
+      ciz.strokes.push(stroke);
+      cizCiz(stroke);
+      break;
+    }
+    case 'draw_clear': {
+      if (Number(msg.channelId) !== ciz.kanal) break;
+      ciz.strokes = [];
+      cizYenidenCiz();
+      break;
+    }
+    case 'draw_full':
+      toast('Çizim tahtası dolu (en fazla 10 kişi)');
+      cizKapat();
+      break;
     default:
       break;
   }
@@ -1408,6 +1459,8 @@ async function joinVoice(channel) {
     // Kanal degisti: ses seviyeleri yeni katilimcilara yeniden uygulanacak.
     voice.applied = new Set();
     voice.facing = mod.getFacing?.() || voice.facing;
+    // Çizim tahtası kanala bağlıdır: kanal değişince kapanır.
+    if (ciz.acik && ciz.kanal !== channel.id) cizKapat();
     // Ses seviyesi ust siniri tarayiciya gore degisir: cikis cihazi secilebilen
     // tarayicilarda %200 (guclendirme), digerlerinde %100. Telefonlarda %100
     // sinirinda kalinir; boylece ses yonlendirmesi bozulmaz ve ses kulakliga gider.
@@ -1501,11 +1554,13 @@ function renderVoice() {
     peers.innerHTML = '';
     $('vs-people').innerHTML = '';
     stage.innerHTML = '';
+    stage.append($('btn-ciz'));
     voiceDom.peers.clear();
     voiceDom.rows.clear();
     voiceDom.tiles.clear();
     voiceDom.maximized = null;
     filmModuKapat();
+    if (ciz.acik) cizKapat();
     renderMembersSide();
     return;
   }
@@ -1881,7 +1936,11 @@ function renderStage(participants) {
       }
     }
   }
-  stage.hidden = want.length === 0;
+  // Sahne sesli kanaldayken her zaman görünür: video yokken ortadaki "Çiz"
+  // düğmesi oyunu başlatır, video varken çıkışın tam ortasında durur.
+  stage.hidden = !voice.channelId;
+  stage.classList.toggle('bos', want.length === 0);
+  if (!stage.contains($('btn-ciz'))) stage.append($('btn-ciz'));
 }
 
 /* ==================== PIP KAMERA (ekran paylaşımı tam ekrandayken) ==================== */
@@ -2305,6 +2364,7 @@ $('btn-leave').addEventListener('click', async () => {
   voice.room = null;
   voice.applied = new Set();
   voiceDom.maximized = null;
+  if (ciz.acik) cizKapat();
   renderVoice();
 });
 
@@ -3301,6 +3361,179 @@ function renderPanelAudit(body, data) {
   }
   body.append(card);
 }
+
+/* ==================== ORTAK ÇİZİM TAHTASI ==================== */
+function cizGonder(payload) {
+  const socket = state.socket;
+  if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(payload));
+}
+
+function cizAc() {
+  if (!voice.channelId) {
+    toast('Önce bir sesli kanala gir');
+    return;
+  }
+  if (ciz.acik) return;
+  ciz.acik = true;
+  ciz.kanal = Number(voice.channelId);
+  ciz.strokes = [];
+  ciz.katilimcilar = [];
+  ciz.ctx = $('ciz-canvas').getContext('2d');
+  cizYenidenCiz();
+  cizKatilimciListesi();
+  $('screen-ciz').hidden = false;
+  cizGonder({ op: 'draw_join', channelId: ciz.kanal });
+}
+
+function cizKapat() {
+  if (!ciz.acik) return;
+  cizGonder({ op: 'draw_leave', channelId: ciz.kanal });
+  ciz.acik = false;
+  ciz.kanal = null;
+  ciz.renk = '';
+  ciz.strokes = [];
+  ciz.katilimcilar = [];
+  ciz.ciziyor = false;
+  ciz.aktif = null;
+  ciz.ctx = null;
+  $('screen-ciz').hidden = true;
+}
+
+function cizCiz(stroke) {
+  const ctx = ciz.ctx;
+  if (!ctx || !stroke?.points?.length) return;
+  const canvas = $('ciz-canvas');
+  const W = canvas.width;
+  const H = canvas.height;
+  const pts = stroke.points;
+  ctx.strokeStyle = stroke.color;
+  ctx.lineWidth = stroke.width;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0] * W, pts[0][1] * H);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0] * W, pts[i][1] * H);
+  ctx.stroke();
+}
+
+function cizYenidenCiz() {
+  const canvas = $('ciz-canvas');
+  const ctx = ciz.ctx;
+  if (!ctx) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (const stroke of ciz.strokes) cizCiz(stroke);
+}
+
+function cizKatilimciListesi() {
+  const kutu = $('ciz-katilimcilar');
+  kutu.innerHTML = '';
+  $('ciz-count').textContent = `${ciz.katilimcilar.length}/10 kişi`;
+  for (const k of ciz.katilimcilar) {
+    const chip = el('span', 'ciz-kisi' + (k.userId === state.me?.id ? ' sen' : ''));
+    const nokta = el('span', 'nokta', '');
+    nokta.style.background = k.color;
+    chip.append(nokta);
+    chip.append(document.createTextNode(k.userId === state.me?.id ? 'Sen' : (k.name || '?')));
+    kutu.append(chip);
+  }
+}
+
+function cizNokta(event) {
+  const rect = $('ciz-canvas').getBoundingClientRect();
+  return [
+    Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)),
+    Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height))
+  ];
+}
+
+/// Renk paleti: herkes kendi rengiyle çizer; sunucu rengi atayınca
+/// (draw_state) yalnızca o renk seçilebilir kalır.
+function cizRenkPaleti() {
+  const kutu = $('ciz-renkler');
+  kutu.innerHTML = '';
+  for (const renk of DRAW_RENKLER) {
+    const btn = el('button', 'ciz-renk', '');
+    btn.type = 'button';
+    btn.style.background = renk;
+    btn.setAttribute('aria-label', `Renk ${renk}`);
+    btn.addEventListener('click', () => {
+      if (ciz.renk && ciz.renk !== renk) return;
+      ciz.renk = renk;
+      cizRenkSec();
+    });
+    kutu.append(btn);
+  }
+}
+
+function cizRenkSec() {
+  const kutu = $('ciz-renkler');
+  kutu.querySelectorAll('.ciz-renk').forEach((b) => {
+    const on = b.style.background === ciz.renk;
+    b.classList.toggle('on', on);
+    b.disabled = Boolean(ciz.renk) && !on;
+  });
+}
+
+function cizBagla() {
+  const canvas = $('ciz-canvas');
+  canvas.addEventListener('pointerdown', (event) => {
+    if (!ciz.acik || !ciz.renk) return;
+    canvas.setPointerCapture(event.pointerId);
+    ciz.ciziyor = true;
+    ciz.son = cizNokta(event);
+    ciz.aktif = {
+      id: `${state.me?.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      color: ciz.renk,
+      width: ciz.firca,
+      points: [ciz.son]
+    };
+  });
+  canvas.addEventListener('pointermove', (event) => {
+    if (!ciz.ciziyor || !ciz.aktif) return;
+    const p = cizNokta(event);
+    const onceki = ciz.son;
+    if (onceki && Math.abs(p[0] - onceki[0]) < 0.001 && Math.abs(p[1] - onceki[1]) < 0.001) return;
+    ciz.aktif.points.push(p);
+    ciz.son = p;
+    // Yerel parça anında çizilir; vuruş bırakılınca tamamı sunucuya gider.
+    const ctx = ciz.ctx;
+    const W = canvas.width;
+    const H = canvas.height;
+    ctx.strokeStyle = ciz.aktif.color;
+    ctx.lineWidth = ciz.aktif.width;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(onceki[0] * W, onceki[1] * H);
+    ctx.lineTo(p[0] * W, p[1] * H);
+    ctx.stroke();
+  });
+  const bitir = () => {
+    if (!ciz.ciziyor) return;
+    ciz.ciziyor = false;
+    const stroke = ciz.aktif;
+    ciz.aktif = null;
+    if (stroke && stroke.points.length > 1) {
+      ciz.strokes.push(stroke);
+      cizGonder({ op: 'draw_stroke', channelId: ciz.kanal, stroke });
+    }
+  };
+  canvas.addEventListener('pointerup', bitir);
+  canvas.addEventListener('pointercancel', bitir);
+}
+
+$('btn-ciz').addEventListener('click', cizAc);
+$('btn-ciz-close').addEventListener('click', cizKapat);
+$('btn-ciz-ayril').addEventListener('click', cizKapat);
+$('btn-ciz-temizle').addEventListener('click', () => {
+  if (!ciz.acik) return;
+  cizGonder({ op: 'draw_clear', channelId: ciz.kanal });
+});
+$('ciz-firca').addEventListener('input', (event) => {
+  ciz.firca = Number(event.target.value);
+});
+cizRenkPaleti();
+cizBagla();
 
 /* ==================== BAŞLAT ==================== */
 window.addEventListener('resize', () => {
