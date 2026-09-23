@@ -1553,8 +1553,11 @@ function renderVoice() {
     stage.hidden = true;
     peers.innerHTML = '';
     $('vs-people').innerHTML = '';
-    stage.innerHTML = '';
-    stage.append($('btn-ciz'));
+    // Yalnızca video kutularını kaldır; "Çiz" düğmesi sahnenin kalıcı
+    // çocuğudur ve innerHTML temizliğiyle yok edilmemelidir.
+    for (const child of [...stage.children]) {
+      if (child !== $('btn-ciz')) child.remove();
+    }
     voiceDom.peers.clear();
     voiceDom.rows.clear();
     voiceDom.tiles.clear();
@@ -1940,7 +1943,8 @@ function renderStage(participants) {
   // düğmesi oyunu başlatır, video varken çıkışın tam ortasında durur.
   stage.hidden = !voice.channelId;
   stage.classList.toggle('bos', want.length === 0);
-  if (!stage.contains($('btn-ciz'))) stage.append($('btn-ciz'));
+  const cizBtn = $('btn-ciz');
+  if (cizBtn && !stage.contains(cizBtn)) stage.append(cizBtn);
 }
 
 /* ==================== PIP KAMERA (ekran paylaşımı tam ekrandayken) ==================== */
