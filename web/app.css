@@ -376,21 +376,7 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 .sheet-card .row .btn-primary{flex:1}
 
 /* ---------- ortak çizim tahtası ---------- */
-/* Sahne (video çıkışı) ortasındaki "Çiz" düğmesi. */
-.ciz-btn{
-  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:6;
-  display:flex;align-items:center;gap:7px;min-height:44px;padding:0 18px;
-  background:rgba(20,22,32,.88);border:1px solid var(--line);border-radius:999px;
-  color:var(--fg);font-size:14px;font-weight:700;box-shadow:0 4px 18px rgba(0,0,0,.45);
-  backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
-}
-.ciz-btn:active{background:var(--bg4)}
-.ciz-btn svg{color:var(--brand)}
-/* Video yokken sahne yalnızca düğmeyi taşır: yeterli yükseklik verilir. */
-.stage.bos{min-height:64px}
-.stage.bos .ciz-btn{position:static;transform:none;margin:0 auto}
-
-/* Çizim penceresi. */
+/* "Çiz" düğmesi sesli çubuğundadır (vbtn); burada yalnızca çizim penceresi. */
 .ciz-card{max-width:min(760px,96vw)}
 .ciz-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
 .ciz-head h2{margin:0;font-size:18px;flex:none}

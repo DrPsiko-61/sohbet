@@ -436,7 +436,7 @@ function renderChannels() {
             const userObj = state.users.get(u.userId) || { displayName: 'Bilinmeyen', avatarColor: '#5865f2' };
             const uRow = el('div', 'chan-vuser');
             uRow.append(avatarNode(userObj, 'xs'));
-            uRow.append(el('span', 'chan-vname', userObj.displayName));
+            uRow.append(el('span', 'chan-vname', userObj.displayName || 'Bilinmeyen'));
             const tag = roleTagNode(userObj.role, userObj.isBot || userObj.username === 'muzik-botu');
             if (tag) uRow.append(tag);
             uRow.addEventListener('click', (e) => {
@@ -1412,7 +1412,7 @@ function renderTyping() {
   for (const [userId, info] of state.typing) {
     if (now - info.at > 5000) state.typing.delete(userId);
   }
-  const names = [...state.typing.values()].map((t) => t.name);
+  const names = [...state.typing.values()].map((t) => t.name || 'Biri');
   const box = $('typing');
   if (!names.length) {
     box.hidden = true;
@@ -1553,11 +1553,7 @@ function renderVoice() {
     stage.hidden = true;
     peers.innerHTML = '';
     $('vs-people').innerHTML = '';
-    // Yalnızca video kutularını kaldır; "Çiz" düğmesi sahnenin kalıcı
-    // çocuğudur ve innerHTML temizliğiyle yok edilmemelidir.
-    for (const child of [...stage.children]) {
-      if (child !== $('btn-ciz')) child.remove();
-    }
+    stage.innerHTML = '';
     voiceDom.peers.clear();
     voiceDom.rows.clear();
     voiceDom.tiles.clear();
@@ -1669,7 +1665,7 @@ function renderPeerChips(participants, activeSpeakers) {
       chip.dataset.avatar = avatarKey;
       chip.querySelector('.avatar').replaceWith(avatarNode(user, 'sm'));
     }
-    const label = isSelf ? 'Sen' : user.displayName;
+    const label = isSelf ? 'Sen' : (user.displayName || 'Bilinmeyen');
     const nameEl = chip.querySelector('.pname');
     if (nameEl.textContent !== label) nameEl.textContent = label;
 
@@ -1716,7 +1712,7 @@ function renderSidePeople(participants, activeSpeakers) {
       voiceDom.rows.set(id, row);
     }
     const nameEl = row.querySelector('strong');
-    const wantName = isSelf ? `${user.displayName} (sen)` : user.displayName;
+    const wantName = isSelf ? `${user.displayName || 'Bilinmeyen'} (sen)` : (user.displayName || 'Bilinmeyen');
     if (nameEl.textContent !== wantName) nameEl.textContent = wantName;
     const info = [micOn ? 'mikrofon açık' : 'sessiz', camOn ? 'kamera' : null, screenOn ? 'ekran' : null]
       .filter(Boolean).join(' · ');
@@ -1828,7 +1824,7 @@ function renderMembersSide() {
 
         const minfo = el('div', 'minfo');
         const mhead = el('div', 'mhead');
-        mhead.append(el('span', 'mname', u.displayName + (u.id === state.me.id ? ' (Sen)' : '')));
+        mhead.append(el('span', 'mname', (u.displayName || 'Bilinmeyen') + (u.id === state.me.id ? ' (Sen)' : '')));
         const isBot = Boolean(u.isBot || u.username === 'muzik-botu');
         const tag = roleTagNode(u.role, isBot);
         if (tag) mhead.append(tag);
@@ -1850,7 +1846,7 @@ function renderMembersSide() {
 
         const minfo = el('div', 'minfo');
         const mhead = el('div', 'mhead');
-        mhead.append(el('span', 'mname', u.displayName));
+        mhead.append(el('span', 'mname', u.displayName || 'Bilinmeyen'));
         const isBot = Boolean(u.isBot || u.username === 'muzik-botu');
         const tag = roleTagNode(u.role, isBot);
         if (tag) mhead.append(tag);
@@ -1939,12 +1935,8 @@ function renderStage(participants) {
       }
     }
   }
-  // Sahne sesli kanaldayken her zaman görünür: video yokken ortadaki "Çiz"
-  // düğmesi oyunu başlatır, video varken çıkışın tam ortasında durur.
-  stage.hidden = !voice.channelId;
-  stage.classList.toggle('bos', want.length === 0);
-  const cizBtn = $('btn-ciz');
-  if (cizBtn && !stage.contains(cizBtn)) stage.append(cizBtn);
+  // Sahne yalnızca video kutularını taşır; "Çiz" düğmesi sesli çubuğundadır.
+  stage.hidden = want.length === 0;
 }
 
 /* ==================== PIP KAMERA (ekran paylaşımı tam ekrandayken) ==================== */
