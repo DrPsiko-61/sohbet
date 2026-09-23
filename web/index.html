@@ -157,6 +157,8 @@
         <button id="btn-share" class="vbtn" type="button"><span>Ekran</span></button>
         <button id="btn-card" class="vbtn" type="button" hidden><span>Capture card</span></button>
         <button id="btn-ciz" class="vbtn ciz" type="button" title="Ortak çizim tahtası"><span>Çiz</span></button>
+        <button id="btn-satranc" class="vbtn" type="button" title="Satranç"><span>♞ Satranç</span></button>
+        <button id="btn-okey" class="vbtn" type="button" title="Okey"><span>🀄 Okey</span></button>
         <button id="btn-vs-side" class="vbtn" type="button"><span>Ayarlar</span></button>
         <button id="btn-audio" class="vbtn warn" type="button" hidden><span>Sesi başlat</span></button>
         <button id="btn-leave" class="vbtn danger" type="button"><span>Ayrıl</span></button>
@@ -367,8 +369,54 @@
   </div>
 </section>
 
+<!-- ==================== SATRANÇ ==================== -->
+<section id="screen-satranc" class="screen sheet" hidden>
+  <div class="sheet-card oyun-card">
+    <div class="oyun-head">
+      <h2>♞ Satranç</h2>
+      <span id="satranc-durum" class="muted"></span>
+      <button id="btn-satranc-close" class="icon-btn" type="button" aria-label="Satrancı kapat" title="Kapat">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+      </button>
+    </div>
+    <div id="satranc-oyuncular" class="oyun-oyuncular"></div>
+    <div class="satranc-board-wrap">
+      <div id="satranc-board" class="satranc-board"></div>
+    </div>
+    <div class="oyun-actions">
+      <button id="btn-satranc-basla" class="vbtn" type="button"><span>Başlat</span></button>
+      <button id="btn-satranc-terk" class="vbtn danger" type="button"><span>Terk et</span></button>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== OKEY ==================== -->
+<section id="screen-okey" class="screen sheet" hidden>
+  <div class="sheet-card oyun-card">
+    <div class="oyun-head">
+      <h2>🀄 Okey</h2>
+      <span id="okey-durum" class="muted"></span>
+      <button id="btn-okey-close" class="icon-btn" type="button" aria-label="Okeyi kapat" title="Kapat">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+      </button>
+    </div>
+    <div id="okey-oyuncular" class="oyun-oyuncular"></div>
+    <div class="okey-masa">
+      <div id="okey-gosterge" class="okey-gosterge"></div>
+      <div id="okey-orta" class="okey-orta"></div>
+    </div>
+    <div id="okey-el" class="okey-el"></div>
+    <div class="oyun-actions">
+      <button id="btn-okey-basla" class="vbtn" type="button"><span>Başlat</span></button>
+      <button id="btn-okey-at" class="vbtn" type="button" hidden><span>Taş at</span></button>
+      <button id="btn-okey-elac" class="vbtn" type="button" hidden><span>El aç</span></button>
+      <button id="btn-okey-ayril" class="vbtn danger" type="button"><span>Ayrıl</span></button>
+    </div>
+  </div>
+</section>
+
 <div id="toast" class="toast" hidden></div>
 
-<script src="/app.js?v=48" type="module"></script>
+<script src="/app.js?v=49" type="module"></script>
 </body>
 </html>

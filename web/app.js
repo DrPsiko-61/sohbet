@@ -85,6 +85,23 @@ const ciz = {
   ctx: null
 };
 
+// Satranç oyunu durumu.
+const satranc = {
+  acik: false,
+  kanal: null,
+  durum: null,
+  secili: null,
+  hamleler: []
+};
+
+// Okey oyunu durumu.
+const okey = {
+  acik: false,
+  kanal: null,
+  durum: null,
+  secili: null
+};
+
 const $ = (id) => document.getElementById(id);
 // Bas konuş klavye gerektirir: yalnızca fareli/klavyeli cihazlarda sunulur.
 const masaustu = typeof window !== 'undefined' &&
@@ -1245,6 +1262,8 @@ function connectSocket() {
   socket.addEventListener('close', (event) => {
     setNet('off');
     if (ciz.acik) cizKapat();
+    if (satranc.acik) satrancKapat();
+    if (okey.acik) okeyKapat();
     if (event.code === 4001 || event.code === 4003) {
       toast('Bu oturum kapatıldı');
       setTimeout(() => location.reload(), 1200);
@@ -1386,6 +1405,35 @@ function handleSocket(msg) {
     case 'draw_full':
       toast('Çizim tahtası dolu (en fazla 10 kişi)');
       cizKapat();
+      break;
+    case 'satranc_state': {
+      if (Number(msg.channelId) !== satranc.kanal) break;
+      satranc.durum = msg.durum;
+      satranc.secili = null;
+      satranc.hamleler = [];
+      satrancRender();
+      break;
+    }
+    case 'satranc_dolu':
+      toast('Satranç odası dolu (2 kişi)');
+      break;
+    case 'okey_state': {
+      if (Number(msg.channelId) !== okey.kanal) break;
+      okey.durum = msg.durum;
+      okey.secili = null;
+      okeyRender();
+      if (msg.kazanan) {
+        const kazanan = msg.durum?.players?.find((p) => p.userId === msg.kazanan);
+        const ad = kazanan?.name || 'Biri';
+        const puanlar = Object.entries(msg.puan || {})
+          .map(([id, p]) => `${msg.durum?.players?.find((x) => x.userId === Number(id))?.name || '?'}: ${p}`)
+          .join(', ');
+        toast(`🀄 ${ad} el açtı! ${puanlar ? 'Rakipler: ' + puanlar : ''}`);
+      }
+      break;
+    }
+    case 'okey_dolu':
+      toast('Okey masası dolu (4 kişi)');
       break;
     default:
       break;
@@ -1570,6 +1618,8 @@ function renderVoice() {
     voiceDom.maximized = null;
     filmModuKapat();
     if (ciz.acik) cizKapat();
+    if (satranc.acik) satrancKapat();
+    if (okey.acik) okeyKapat();
     renderMembersSide();
     return;
   }
@@ -2371,6 +2421,8 @@ $('btn-leave').addEventListener('click', async () => {
   voice.applied = new Set();
   voiceDom.maximized = null;
   if (ciz.acik) cizKapat();
+  if (satranc.acik) satrancKapat();
+  if (okey.acik) okeyKapat();
   renderVoice();
 });
 
@@ -3623,6 +3675,352 @@ $('ciz-renk-sec').addEventListener('input', (event) => {
 });
 cizRenkPaleti();
 cizBagla();
+
+/* ==================== SATRANÇ ==================== */
+const SATRANC_TAŞ = {
+  w: { k: '♔', q: '♕', r: '♖', b: '♗', n: '♘', p: '♙' },
+  b: { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' }
+};
+
+function satrancAc() {
+  if (!voice.channelId) { toast('Önce bir sesli kanala gir'); return; }
+  if (satranc.acik) return;
+  satranc.acik = true;
+  satranc.kanal = voice.channelId;
+  $('screen-satranc').hidden = false;
+  cizKapat();
+  okeyKapat();
+  satrancGonder({ op: 'satranc_join', channelId: satranc.kanal });
+}
+
+function satrancKapat() {
+  if (!satranc.acik) return;
+  satrancGonder({ op: 'satranc_leave', channelId: satranc.kanal });
+  satranc.acik = false;
+  satranc.kanal = null;
+  satranc.durum = null;
+  satranc.secili = null;
+  satranc.hamleler = [];
+  $('screen-satranc').hidden = true;
+}
+
+function satrancGonder(payload) {
+  if (state.socket?.readyState === WebSocket.OPEN) state.socket.send(JSON.stringify(payload));
+}
+
+function satrancRenk() {
+  const d = satranc.durum;
+  if (!d) return null;
+  const p = d.players.find((x) => x.userId === state.me?.id);
+  return p ? p.renk : null;
+}
+
+// --- Yerel hamle uretici (vurgulama icin; sunucu da dogrular) ---
+function satrancKareSaldiriYerel(board, r, c, byColor) {
+  const inBoard = (rr, cc) => rr >= 0 && rr < 8 && cc >= 0 && cc < 8
+  const at = (rr, cc) => (inBoard(rr, cc) ? board[rr][cc] : null)
+  const p = (rr, cc, t) => { const x = at(rr, cc); return x && x.c === byColor && x.t === t }
+  const dir = byColor === 'w' ? -1 : 1
+  if (p(r - dir, c - 1, 'p') || p(r - dir, c + 1, 'p')) return true
+  for (const [dr, dc] of [[-2, -1], [-2, 1], [-1, -2], [-1, 2], [1, -2], [1, 2], [2, -1], [2, 1]]) if (p(r + dr, c + dc, 'n')) return true
+  for (const [dr, dc] of [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]) if (p(r + dr, c + dc, 'k')) return true
+  for (const [dr, dc] of [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]) {
+    let rr = r + dr, cc = c + dc
+    while (inBoard(rr, cc)) {
+      const x = at(rr, cc)
+      if (x) {
+        if (x.c === byColor && (x.t === 'q' || (x.t === 'b' && dr !== 0 && dc !== 0) || (x.t === 'r' && (dr === 0 || dc === 0)))) return true
+        break
+      }
+      rr += dr; cc += dc
+    }
+  }
+  return false
+}
+
+function satrancSahYerel(board, color) {
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    if (board[r][c]?.t === 'k' && board[r][c]?.c === color) return satrancKareSaldiriYerel(board, r, c, color === 'w' ? 'b' : 'w')
+  }
+  return true
+}
+
+function satrancUygulaYerel(board, m) {
+  const [fr, fc] = m.from, [tr, tc] = m.to
+  const piece = board[fr][fc]
+  board[fr][fc] = null
+  if (m.ep) board[fr][tc] = null
+  board[tr][tc] = m.promo ? { t: m.promo, c: piece.c } : piece
+  if (m.castle === 'k') { board[fr][7] = null; board[fr][5] = { t: 'r', c: piece.c } }
+  if (m.castle === 'q') { board[fr][0] = null; board[fr][3] = { t: 'r', c: piece.c } }
+}
+
+function satrancHamlelerYerel(board, color, castling, ep) {
+  const inBoard = (rr, cc) => rr >= 0 && rr < 8 && cc >= 0 && cc < 8
+  const at = (rr, cc) => (inBoard(rr, cc) ? board[rr][cc] : null)
+  const moves = []
+  const push = (fr, fc, tr, tc, extra) => { if (inBoard(tr, tc)) moves.push({ from: [fr, fc], to: [tr, tc], ...extra }) }
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    const p = board[r][c]
+    if (!p || p.c !== color) continue
+    const t = p.t
+    if (t === 'p') {
+      const dir = color === 'w' ? -1 : 1
+      const start = color === 'w' ? 6 : 1
+      const promo = r + dir === 0 || r + dir === 7 ? 'q' : null
+      if (inBoard(r + dir, c) && !at(r + dir, c)) {
+        push(r, c, r + dir, c, { promo })
+        if (r === start && !at(r + 2 * dir, c)) push(r, c, r + 2 * dir, c, {})
+      }
+      for (const dc of [-1, 1]) {
+        const nc = c + dc
+        if (!inBoard(r + dir, nc)) continue
+        const target = at(r + dir, nc)
+        if (target && target.c !== color) push(r, c, r + dir, nc, { promo })
+        else if (ep && ep[0] === r + dir && ep[1] === nc) push(r, c, r + dir, nc, { ep: true })
+      }
+    } else if (t === 'n') {
+      for (const [dr, dc] of [[-2, -1], [-2, 1], [-1, -2], [-1, 2], [1, -2], [1, 2], [2, -1], [2, 1]]) {
+        const nr = r + dr, nc = c + dc
+        const target = at(nr, nc)
+        if (inBoard(nr, nc) && (!target || target.c !== color)) push(r, c, nr, nc, {})
+      }
+    } else if (t === 'b' || t === 'r' || t === 'q') {
+      const yonler = t === 'b' ? [[-1, -1], [-1, 1], [1, -1], [1, 1]] : t === 'r' ? [[-1, 0], [1, 0], [0, -1], [0, 1]] : [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]
+      for (const [dr, dc] of yonler) {
+        let nr = r + dr, nc = c + dc
+        while (inBoard(nr, nc)) {
+          const target = at(nr, nc)
+          if (!target) push(r, c, nr, nc, {})
+          else { if (target.c !== color) push(r, c, nr, nc, {}); break }
+          nr += dr; nc += dc
+        }
+      }
+    } else if (t === 'k') {
+      for (const [dr, dc] of [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]) {
+        const nr = r + dr, nc = c + dc
+        const target = at(nr, nc)
+        if (inBoard(nr, nc) && (!target || target.c !== color)) push(r, c, nr, nc, {})
+      }
+      const opp = color === 'w' ? 'b' : 'w'
+      if (color === 'w' && r === 7 && c === 4) {
+        if (castling.wk && !at(7, 5) && !at(7, 6) && at(7, 7)?.t === 'r' && at(7, 7)?.c === 'w' && !satrancKareSaldiriYerel(board, 7, 5, opp) && !satrancKareSaldiriYerel(board, 7, 6, opp)) push(7, 4, 7, 6, { castle: 'k' })
+        if (castling.wq && !at(7, 3) && !at(7, 2) && !at(7, 1) && at(7, 0)?.t === 'r' && at(7, 0)?.c === 'w' && !satrancKareSaldiriYerel(board, 7, 3, opp) && !satrancKareSaldiriYerel(board, 7, 2, opp)) push(7, 4, 7, 2, { castle: 'q' })
+      }
+      if (color === 'b' && r === 0 && c === 4) {
+        if (castling.bk && !at(0, 5) && !at(0, 6) && at(0, 7)?.t === 'r' && at(0, 7)?.c === 'b' && !satrancKareSaldiriYerel(board, 0, 5, opp) && !satrancKareSaldiriYerel(board, 0, 6, opp)) push(0, 4, 0, 6, { castle: 'k' })
+        if (castling.bq && !at(0, 3) && !at(0, 2) && !at(0, 1) && at(0, 0)?.t === 'r' && at(0, 0)?.c === 'b' && !satrancKareSaldiriYerel(board, 0, 3, opp) && !satrancKareSaldiriYerel(board, 0, 2, opp)) push(0, 4, 0, 2, { castle: 'q' })
+      }
+    }
+  }
+  return moves.filter((m) => {
+    const nb = board.map((row) => row.slice())
+    satrancUygulaYerel(nb, m)
+    return !satrancSahYerel(nb, color)
+  })
+}
+
+function satrancRender() {
+  const d = satranc.durum;
+  if (!d) return;
+  const kutu = $('satranc-board');
+  kutu.innerHTML = '';
+  const ben = satrancRenk();
+  const benimSira = d.turn === ben && d.state === 'oyun';
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const g = ben === 'b' ? 7 - r : r;
+      const s = ben === 'b' ? 7 - c : c;
+      const tas = d.board[g][s];
+      const kare = el('button', 'satranc-kare' + ((g + s) % 2 === 0 ? ' acik' : ' koyu'));
+      kare.type = 'button';
+      if (tas) {
+        kare.textContent = SATRANC_TAŞ[tas.c][tas.t];
+        kare.classList.add(tas.c === 'w' ? 'beyaz' : 'siyah');
+      }
+      if (d.lastMove && ((d.lastMove.from[0] === g && d.lastMove.from[1] === s) || (d.lastMove.to[0] === g && d.lastMove.to[1] === s))) {
+        kare.classList.add('son');
+      }
+      if (benimSira && tas && tas.c === ben) {
+        kare.addEventListener('click', () => satrancSec(g, s));
+        kare.classList.add('tasim');
+      } else if (benimSira && satranc.secili) {
+        const hamle = satranc.hamleler.find((h) => h.to[0] === g && h.to[1] === s);
+        if (hamle) {
+          kare.addEventListener('click', () => satrancHamle(hamle));
+          kare.classList.add('hedef');
+        }
+      }
+      kutu.append(kare);
+    }
+  }
+  const durumEl = $('satranc-durum');
+  const oyuncular = d.players.map((p) => `${p.userId === state.me?.id ? 'Sen' : (state.users.get(p.userId)?.displayName || '?')} (${p.renk === 'w' ? 'beyaz' : 'siyah'})`).join(' vs ');
+  if (d.state === 'bekliyor') durumEl.textContent = `${oyuncular || 'Oyuncu bekleniyor'} — Başlat'a bas`;
+  else if (d.state === 'oyun') durumEl.textContent = `${oyuncular} — Sıra: ${d.turn === ben ? 'sende' : 'rakipte'}`;
+  else if (d.state === 'mat') durumEl.textContent = `Şah mat! ${d.winner === state.me?.id ? 'Kazandın 🎉' : 'Kaybettin'}`;
+  else if (d.state === 'pat') durumEl.textContent = 'Pat (berabere)';
+  $('btn-satranc-basla').hidden = d.state === 'oyun';
+}
+
+function satrancSec(r, c) {
+  if (satranc.secili && satranc.secili[0] === r && satranc.secili[1] === c) {
+    satranc.secili = null;
+    satranc.hamleler = [];
+    satrancRender();
+    return;
+  }
+  satranc.secili = [r, c];
+  const d = satranc.durum;
+  satranc.hamleler = d ? satrancHamlelerYerel(d.board, d.turn, d.castling, d.ep).filter((h) => h.from[0] === r && h.from[1] === c) : [];
+  satrancRender();
+}
+
+function satrancHamle(hamle) {
+  satrancGonder({ op: 'satranc_move', channelId: satranc.kanal, from: hamle.from, to: hamle.to });
+}
+
+/* ==================== OKEY ==================== */
+const OKEY_RENK_RENK = { k: '#ef4444', s: '#facc15', m: '#3b82f6', a: '#e5e7eb' };
+
+function okeyAc() {
+  if (!voice.channelId) { toast('Önce bir sesli kanala gir'); return; }
+  if (okey.acik) return;
+  okey.acik = true;
+  okey.kanal = voice.channelId;
+  $('screen-okey').hidden = false;
+  cizKapat();
+  satrancKapat();
+  okeyGonder({ op: 'okey_join', channelId: okey.kanal });
+}
+
+function okeyKapat() {
+  if (!okey.acik) return;
+  okeyGonder({ op: 'okey_leave', channelId: okey.kanal });
+  okey.acik = false;
+  okey.kanal = null;
+  okey.durum = null;
+  okey.secili = null;
+  $('screen-okey').hidden = true;
+}
+
+function okeyGonder(payload) {
+  if (state.socket?.readyState === WebSocket.OPEN) state.socket.send(JSON.stringify(payload));
+}
+
+function okeyTasEtiket(tas) {
+  if (tas === 'j1' || tas === 'j2') return '★';
+  return tas.slice(1);
+}
+
+function okeyTasEl(tas, okeyMi) {
+  const btn = el('button', 'okey-tas' + (okeyMi ? ' okey' : ''));
+  btn.type = 'button';
+  btn.dataset.tas = tas;
+  const renk = tas[0];
+  btn.style.color = OKEY_RENK_RENK[renk] || '#e5e7eb';
+  btn.textContent = okeyTasEtiket(tas);
+  return btn;
+}
+
+function okeyTasSiralama(a, b) {
+  const ra = a[0], rb = b[0];
+  const na = a === 'j1' || a === 'j2' ? 0 : Number(a.slice(1));
+  const nb = b === 'j1' || b === 'j2' ? 0 : Number(b.slice(1));
+  if (ra !== rb) return ra < rb ? -1 : 1;
+  return na - nb;
+}
+
+function okeyRender() {
+  const d = okey.durum;
+  if (!d) return;
+  const oyuncular = $('okey-oyuncular');
+  oyuncular.innerHTML = '';
+  for (const p of d.players) {
+    const chip = el('div', 'okey-kisi' + (p.userId === d.turn ? ' sira' : '') + (p.userId === d.kazanan ? ' kazandi' : ''));
+    const ad = p.userId === state.me?.id ? 'Sen' : p.name;
+    chip.append(el('span', null, `${ad} (${p.tasSayisi} taş)`));
+    if (p.roundWins > 0) chip.append(el('span', 'okey-galibiyet', `🏆${p.roundWins}`));
+    oyuncular.append(chip);
+  }
+  const gosterge = $('okey-gosterge');
+  gosterge.innerHTML = '';
+  if (d.gosterge) {
+    gosterge.append(el('div', 'okey-etiket', 'Gösterge'));
+    gosterge.append(okeyTasEl(d.gosterge));
+    gosterge.append(el('div', 'okey-etiket', 'Okey'));
+    gosterge.append(okeyTasEl(d.okey, true));
+  }
+  const orta = $('okey-orta');
+  orta.innerHTML = '';
+  const cekebilir = d.state === 'oyun' && d.turn === state.me?.id && !d.cekti;
+  const duvar = el('button', 'okey-duvar', `🂠 ${d.wallCount}`);
+  duvar.type = 'button';
+  duvar.title = 'Duvar (taş çek)';
+  duvar.disabled = !cekebilir;
+  duvar.addEventListener('click', () => okeyGonder({ op: 'okey_cekim', channelId: okey.kanal, kaynak: 'duvar' }));
+  orta.append(duvar);
+  if (d.sonAtilan) {
+    const cope = el('button', 'okey-cope', '');
+    cope.type = 'button';
+    cope.title = 'Çöpten al';
+    cope.append(okeyTasEl(d.sonAtilan));
+    cope.disabled = !cekebilir;
+    cope.addEventListener('click', () => okeyGonder({ op: 'okey_cekim', channelId: okey.kanal, kaynak: 'cope' }));
+    orta.append(cope);
+  }
+  const elKutu = $('okey-el');
+  elKutu.innerHTML = '';
+  if (d.el) {
+    const sirali = [...d.el].sort(okeyTasSiralama);
+    for (const tas of sirali) {
+      const btn = okeyTasEl(tas, tas === d.okey || tas === 'j1' || tas === 'j2');
+      btn.classList.add('okey-el-tas');
+      if (okey.secili === tas) btn.classList.add('secili');
+      btn.addEventListener('click', () => {
+        if (d.state !== 'oyun' || d.turn !== state.me?.id || !d.cekti) return;
+        okey.secili = okey.secili === tas ? null : tas;
+        okeyRender();
+      });
+      elKutu.append(btn);
+    }
+  }
+  const durumEl = $('okey-durum');
+  if (d.state === 'bekliyor') durumEl.textContent = `${d.players.length}/4 oyuncu — Başlat'a bas`;
+  else if (d.state === 'oyun') {
+    const sira = d.players.find((p) => p.userId === d.turn);
+    durumEl.textContent = d.turn === state.me?.id ? (d.cekti ? 'Sıra sende — taş at' : 'Sıra sende — taş çek') : `${sira?.name || 'Rakip'} oynuyor`;
+  } else if (d.state === 'bitti') {
+    const kazanan = d.players.find((p) => p.userId === d.kazanan);
+    durumEl.textContent = `${kazanan?.name || 'Biri'} el açtı!`;
+  }
+  $('btn-okey-basla').hidden = d.state === 'oyun';
+  $('btn-okey-at').hidden = !(d.state === 'oyun' && d.turn === state.me?.id && d.cekti);
+  $('btn-okey-elac').hidden = !(d.state === 'oyun' && d.turn === state.me?.id && d.cekti);
+}
+
+$('btn-satranc').addEventListener('click', satrancAc);
+$('btn-satranc-close').addEventListener('click', satrancKapat);
+$('btn-satranc-basla').addEventListener('click', () => {
+  if (!satranc.acik) return;
+  satrancGonder({ op: 'satranc_basla', channelId: satranc.kanal });
+});
+$('btn-satranc-terk').addEventListener('click', satrancKapat);
+$('btn-okey').addEventListener('click', okeyAc);
+$('btn-okey-close').addEventListener('click', okeyKapat);
+$('btn-okey-ayril').addEventListener('click', okeyKapat);
+$('btn-okey-basla').addEventListener('click', () => {
+  if (!okey.acik) return;
+  okeyGonder({ op: 'okey_basla', channelId: okey.kanal });
+});
+$('btn-okey-at').addEventListener('click', () => {
+  if (!okey.acik || !okey.secili) return;
+  okeyGonder({ op: 'okey_at', channelId: okey.kanal, tas: okey.secili });
+});
+$('btn-okey-elac').addEventListener('click', () => {
+  if (!okey.acik) return;
+  okeyGonder({ op: 'okey_elac', channelId: okey.kanal });
+});
 
 /* ==================== BAŞLAT ==================== */
 window.addEventListener('resize', () => {
