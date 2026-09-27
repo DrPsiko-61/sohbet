@@ -96,7 +96,7 @@ export function createHub(server) {
     if (event.event !== 'room_finished' && !Number.isFinite(identity)) return
 
     const ensure = (id) => {
-      if (!users.has(id)) users.set(id, { muted: false, video: false, screen: false, joinedAt: Date.now() })
+      if (!users.has(id)) users.set(id, { muted: false, video: false, screen: false, joinedAt: Date.now(), ping: null })
       return users.get(id)
     }
 
@@ -372,194 +372,6 @@ export function createHub(server) {
     room.lastMove = null
   }
 
-  // --- Okey (duz okey) ---
-  // 106 tas: 4 renk x 2 deste x 1-13 + 2 sahte okey. 4 kisi, 14 tas (ilk oyuncu 15).
-  // Gosterge belirlenir, okey tasi sahte okeylerle birlikte joker olur.
-  const okey = new Map() // channelId -> room
-  const OKEY_RENKLER = ['k', 's', 'm', 'a'] // kirmizi, sari, mavi, siyah
-  const OKEY_RENK_AD = { k: 'kırmızı', s: 'sarı', m: 'mavi', a: 'siyah' }
-  const OKEY_HEDEF = 3 // 3 el kazanan oyunu kazanir
-
-  function okeyRoom(channelId) {
-    let room = okey.get(channelId)
-    if (!room) {
-      room = { players: new Map(), hands: new Map(), wall: [], discard: [], gosterge: null, okey: null, turn: null, cekti: new Map(), state: 'bekliyor', kazanan: null, roundWins: new Map(), first: null, sonAtilan: null }
-      okey.set(channelId, room)
-    }
-    return room
-  }
-
-  function okeyOkey(gosterge) {
-    if (gosterge === 'j1' || gosterge === 'j2') return 'j1'
-    const renk = gosterge[0]
-    const num = Number(gosterge.slice(1))
-    return renk + (num === 13 ? 1 : num + 1)
-  }
-
-  function okeyDagit(room) {
-    const taslar = []
-    for (const renk of OKEY_RENKLER) for (let n = 1; n <= 13; n++) { taslar.push(renk + n); taslar.push(renk + n) }
-    taslar.push('j1', 'j2')
-    for (let i = taslar.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1))
-      ;[taslar[i], taslar[j]] = [taslar[j], taslar[i]]
-    }
-    const ids = [...room.players.keys()]
-    const first = ids[Math.floor(Math.random() * ids.length)]
-    room.first = first
-    room.hands = new Map()
-    room.cekti = new Map()
-    let idx = 0
-    for (const id of ids) {
-      const n = id === first ? 15 : 14
-      room.hands.set(id, taslar.slice(idx, idx + n))
-      room.cekti.set(id, id === first)
-      idx += n
-    }
-    room.wall = taslar.slice(idx)
-    room.discard = []
-    room.sonAtilan = null
-    room.gosterge = room.wall.pop()
-    room.okey = okeyOkey(room.gosterge)
-    room.turn = first
-    room.state = 'oyun'
-    room.kazanan = null
-  }
-
-  function okeySira(room, userId) {
-    const ids = [...room.players.keys()]
-    const i = ids.indexOf(userId)
-    return ids[(i + 1) % ids.length]
-  }
-
-  function okeyElAcikMi(hand, okeyTas) {
-    const say = new Map()
-    for (const t of hand) say.set(t, (say.get(t) || 0) + 1)
-    let wild = 0
-    for (const t of ['j1', 'j2']) { wild += say.get(t) || 0; say.delete(t) }
-    if (okeyTas !== 'j1' && okeyTas !== 'j2') { wild += say.get(okeyTas) || 0; say.delete(okeyTas) }
-    const icIce = new Map()
-    for (const [t, n] of say) {
-      const renk = t[0]
-      const num = Number(t.slice(1))
-      if (!icIce.has(renk)) icIce.set(renk, new Map())
-      icIce.get(renk).set(num, n)
-    }
-    const klon = () => {
-      const y = new Map()
-      for (const [r, nums] of icIce) y.set(r, new Map(nums))
-      return y
-    }
-    const azalt = (m, r, n) => {
-      const nums = m.get(r)
-      const k = nums.get(n)
-      if (k === 1) nums.delete(n)
-      else nums.set(n, k - 1)
-      if (!nums.size) m.delete(r)
-    }
-    // Cift: iki ayni tas
-    for (const [t, n] of say) {
-      if (n < 2) continue
-      const y = klon()
-      azalt(y, t[0], Number(t.slice(1)))
-      azalt(y, t[0], Number(t.slice(1)))
-      if (okeyGrupKontrol(y, wild)) return true
-    }
-    // Cift: tas + joker
-    if (wild >= 1) {
-      for (const t of say.keys()) {
-        const y = klon()
-        azalt(y, t[0], Number(t.slice(1)))
-        if (okeyGrupKontrol(y, wild - 1)) return true
-      }
-    }
-    // Cift: iki joker
-    if (wild >= 2 && okeyGrupKontrol(klon(), wild - 2)) return true
-    return false
-  }
-
-  function okeyGrupKontrol(say, wild) {
-    if (!say.size) return wild === 0
-    let ilk = null
-    for (const [r, nums] of say) for (const [n, cnt] of nums) if (cnt > 0) { ilk = [r, Number(n)]; break }
-    if (!ilk) return wild === 0
-    const [renk, num] = ilk
-    const azalt = (r, n) => {
-      const m = say.get(r)
-      const k = m.get(n)
-      if (k === 1) m.delete(n)
-      else m.set(n, k - 1)
-      if (!m.size) say.delete(r)
-    }
-    const klon = () => {
-      const y = new Map()
-      for (const [r, nums] of say) y.set(r, new Map(nums))
-      return y
-    }
-    // SET: ayni numara, farkli renkler (3-4 tas)
-    const renkler = []
-    for (const [r, nums] of say) if ((nums.get(num) || 0) > 0) renkler.push(r)
-    for (let boyut = 3; boyut <= 4; boyut++) {
-      const eksik = boyut - renkler.length
-      if (eksik >= 0 && eksik <= wild) {
-        const yedek = klon()
-        for (const r of renkler.slice(0, boyut)) azalt(r, num)
-        if (okeyGrupKontrol(say, wild - eksik)) return true
-        say.clear()
-        for (const [r, nums] of yedek) say.set(r, new Map(nums))
-      }
-    }
-    // RUN: ayni renk, ardisik numaralar (3+ tas)
-    let uzunluk = 0
-    while ((say.get(renk)?.get(num + uzunluk) || 0) > 0) uzunluk++
-    for (let boyut = 3; boyut <= 13; boyut++) {
-      const eksik = boyut - uzunluk
-      if (eksik >= 0 && eksik <= wild && num + boyut - 1 <= 13) {
-        const yedek = klon()
-        for (let i = 0; i < uzunluk; i++) azalt(renk, num + i)
-        if (okeyGrupKontrol(say, wild - eksik)) return true
-        say.clear()
-        for (const [r, nums] of yedek) say.set(r, new Map(nums))
-      }
-    }
-    return false
-  }
-
-  function okeyTasDeger(tas, okeyTas) {
-    if (tas === 'j1' || tas === 'j2') return 2
-    const num = Number(tas.slice(1))
-    return tas === okeyTas ? num * 2 : num
-  }
-
-  function okeyDurum(room, userId) {
-    return {
-      players: [...room.players.entries()].map(([id, u]) => ({ userId: id, name: u.name, tasSayisi: room.hands.get(id)?.length || 0, roundWins: room.roundWins.get(id) || 0 })),
-      el: room.hands.get(userId) || [],
-      wallCount: room.wall.length,
-      discard: room.discard,
-      sonAtilan: room.sonAtilan,
-      gosterge: room.gosterge,
-      okey: room.okey,
-      turn: room.turn,
-      cekti: room.cekti.get(userId) || false,
-      state: room.state,
-      kazanan: room.kazanan,
-      first: room.first,
-      ben: userId
-    }
-  }
-
-  function sendOkey(channelId, message) {
-    const room = okey.get(channelId)
-    if (!room) return
-    for (const userId of room.players.keys()) {
-      const sockets = clients.get(userId)
-      if (!sockets) continue
-      const data = JSON.stringify({ ...message, durum: okeyDurum(room, userId) })
-      for (const ws of sockets) if (ws.readyState === ws.OPEN) ws.send(data)
-    }
-  }
-
   wss.on('connection', (ws, req) => {
     let user = sessionUser(tokenFromRequest(req))
     let authed = Boolean(user)
@@ -621,10 +433,25 @@ export function createHub(server) {
             muted: Boolean(msg.muted),
             video: Boolean(msg.video),
             screen: Boolean(msg.screen),
-            joinedAt: Date.now()
+            joinedAt: Date.now(),
+            ping: null
           })
           voice.set(channel.id, users)
           pushVoice(channel.id)
+          break
+        }
+        case 'voice_ping': {
+          const channelId = Number(msg.channelId)
+          const users = voice.get(channelId)
+          if (!users || !users.has(user.id)) return
+          const ping = Math.round(Number(msg.ping))
+          if (Number.isFinite(ping) && ping >= 0 && ping < 60000) {
+            const s = users.get(user.id)
+            if (s && (s.ping === null || Math.abs(s.ping - ping) >= 3)) {
+              s.ping = ping
+              pushVoice(channelId)
+            }
+          }
           break
         }
         case 'voice_update': {
@@ -800,88 +627,6 @@ export function createHub(server) {
           sendSatranc(Number(msg.channelId), { op: 'satranc_state', channelId: Number(msg.channelId), durum: satrancDurum(room) })
           break
         }
-        case 'okey_join': {
-          const channel = canSee(Number(msg.channelId), user.id)
-          if (!channel || channel.type !== 'voice') return
-          if (!voice.get(channel.id)?.has(user.id)) return
-          const room = okeyRoom(channel.id)
-          if (room.players.has(user.id)) break
-          if (room.players.size >= 4) {
-            ws.send(JSON.stringify({ op: 'okey_dolu', channelId: channel.id }))
-            break
-          }
-          room.players.set(user.id, { name: user.display_name })
-          room.roundWins.set(user.id, room.roundWins.get(user.id) || 0)
-          sendOkey(channel.id, { op: 'okey_state', channelId: channel.id })
-          break
-        }
-        case 'okey_leave': {
-          const room = okey.get(Number(msg.channelId))
-          if (!room) break
-          if (room.players.delete(user.id)) {
-            room.roundWins.delete(user.id)
-            if (room.state === 'oyun' && room.players.size < 2) {
-              room.state = 'bekliyor'
-              room.kazanan = null
-            }
-            sendOkey(Number(msg.channelId), { op: 'okey_state', channelId: Number(msg.channelId) })
-            if (!room.players.size) okey.delete(Number(msg.channelId))
-          }
-          break
-        }
-        case 'okey_basla': {
-          const room = okey.get(Number(msg.channelId))
-          if (!room || room.players.size < 2 || room.players.size > 4) break
-          okeyDagit(room)
-          sendOkey(Number(msg.channelId), { op: 'okey_state', channelId: Number(msg.channelId) })
-          break
-        }
-        case 'okey_cekim': {
-          const room = okey.get(Number(msg.channelId))
-          if (!room || room.state !== 'oyun' || room.turn !== user.id || room.cekti.get(user.id)) break
-          const kaynak = msg.kaynak === 'cope' ? 'cope' : 'duvar'
-          let tas = null
-          if (kaynak === 'cope' && room.discard.length) tas = room.discard.pop()
-          else if (room.wall.length) tas = room.wall.pop()
-          if (!tas) break
-          room.hands.get(user.id).push(tas)
-          room.cekti.set(user.id, true)
-          room.sonAtilan = null
-          sendOkey(Number(msg.channelId), { op: 'okey_state', channelId: Number(msg.channelId) })
-          break
-        }
-        case 'okey_at': {
-          const room = okey.get(Number(msg.channelId))
-          if (!room || room.state !== 'oyun' || room.turn !== user.id || !room.cekti.get(user.id)) break
-          const tas = typeof msg.tas === 'string' ? msg.tas : ''
-          const el = room.hands.get(user.id)
-          const i = el.indexOf(tas)
-          if (i < 0) break
-          el.splice(i, 1)
-          room.discard.push(tas)
-          room.sonAtilan = tas
-          room.cekti.set(user.id, false)
-          room.turn = okeySira(room, user.id)
-          sendOkey(Number(msg.channelId), { op: 'okey_state', channelId: Number(msg.channelId) })
-          break
-        }
-        case 'okey_elac': {
-          const room = okey.get(Number(msg.channelId))
-          if (!room || room.state !== 'oyun' || room.turn !== user.id) break
-          const el = room.hands.get(user.id)
-          if (!okeyElAcikMi(el, room.okey)) break
-          room.state = 'bitti'
-          room.kazanan = user.id
-          const puan = {}
-          for (const [id, u] of room.players) {
-            if (id === user.id) continue
-            const toplam = (room.hands.get(id) || []).reduce((s, t) => s + okeyTasDeger(t, room.okey), 0)
-            puan[id] = toplam
-          }
-          room.roundWins.set(user.id, (room.roundWins.get(user.id) || 0) + 1)
-          sendOkey(Number(msg.channelId), { op: 'okey_state', channelId: Number(msg.channelId), kazanan: user.id, puan })
-          break
-        }
         default:
           break
       }
@@ -911,19 +656,6 @@ export function createHub(server) {
             room.players.delete(user.id)
             sendSatranc(cid, { op: 'satranc_state', channelId: cid, durum: satrancDurum(room) })
             if (!room.players.size) satranc.delete(cid)
-          }
-        }
-        for (const cid of [...okey.keys()]) {
-          const room = okey.get(cid)
-          if (room?.players.has(user.id)) {
-            room.players.delete(user.id)
-            room.roundWins.delete(user.id)
-            if (room.state === 'oyun' && room.players.size < 2) {
-              room.state = 'bekliyor'
-              room.kazanan = null
-            }
-            sendOkey(cid, { op: 'okey_state', channelId: cid })
-            if (!room.players.size) okey.delete(cid)
           }
         }
         seen.set(user.id, Date.now())

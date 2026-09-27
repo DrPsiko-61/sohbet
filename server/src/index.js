@@ -2,7 +2,7 @@ import { createServer } from 'node:http'
 import { buildRoutes, serveFile, cleanupOrphans, tokenFromRequest } from './http.js'
 import { createHub } from './ws.js'
 import { initMusicBot, kapatMusicBot } from './bot.js'
-import { initSeed } from './seed.js'
+import { initHelelele } from './helelele.js'
 import { purgeExpiredSessions } from './auth.js'
 import { q } from './db.js'
 
@@ -28,8 +28,8 @@ const server = createServer((req, res) => {
 
 const hub = createHub(server)
 const routes = buildRoutes({ hub })
-initSeed()
 initMusicBot({ hub })
+initHelelele({ hub })
 
 async function dispatch(req, res, url) {
   if (url.pathname.startsWith('/api/')) {

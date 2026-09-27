@@ -94,14 +94,6 @@ const satranc = {
   hamleler: []
 };
 
-// Okey oyunu durumu.
-const okey = {
-  acik: false,
-  kanal: null,
-  durum: null,
-  secili: null
-};
-
 const $ = (id) => document.getElementById(id);
 // Bas konuş klavye gerektirir: yalnızca fareli/klavyeli cihazlarda sunulur.
 const masaustu = typeof window !== 'undefined' &&
@@ -1103,6 +1095,12 @@ function chatSideCiz() {
   document.body.classList.toggle('cside-acik', cside.acik);
   const dugme = $('btn-chat-side');
   if (dugme) dugme.classList.toggle('active', cside.acik);
+  const vdugme = $('btn-vchat');
+  if (vdugme) vdugme.classList.toggle('active', cside.acik);
+  for (const tile of voiceDom.tiles.values()) {
+    const tchat = tile.querySelector('.tchat');
+    if (tchat) tchat.classList.toggle('active', cside.acik);
+  }
   if (cside.acik) {
     chatSideKanalDoldur();
     chatSideListele();
@@ -1242,6 +1240,34 @@ function setNet(status) {
   badge.title = { on: 'Bağlı', off: 'Bağlantı yok', warn: 'Yeniden bağlanıyor' }[status] || '';
 }
 
+let pingTimer = null;
+let lastWsPing = null;
+
+function pingDongusu() {
+  if (pingTimer) return;
+  pingTimer = setInterval(async () => {
+    if (!state.socket || state.socket.readyState !== WebSocket.OPEN) return;
+    try {
+      state.socket.send(JSON.stringify({ op: 'ping', t: performance.now() }));
+    } catch {}
+
+    if (voice.channelId) {
+      let rtt = null;
+      if (voice.mod?.getPing) {
+        try {
+          rtt = await voice.mod.getPing();
+        } catch {}
+      }
+      if (rtt === null && lastWsPing !== null) rtt = lastWsPing;
+      if (typeof rtt === 'number' && rtt >= 0) {
+        try {
+          state.socket.send(JSON.stringify({ op: 'voice_ping', channelId: voice.channelId, ping: rtt }));
+        } catch {}
+      }
+    }
+  }, 3000);
+}
+
 function connectSocket() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   const socket = new WebSocket(`${proto}://${location.host}/ws`);
@@ -1251,6 +1277,7 @@ function connectSocket() {
   socket.addEventListener('open', () => {
     state.reconnectDelay = 1000;
     setNet('on');
+    pingDongusu();
   });
 
   socket.addEventListener('message', (event) => {
@@ -1263,7 +1290,6 @@ function connectSocket() {
     setNet('off');
     if (ciz.acik) cizKapat();
     if (satranc.acik) satrancKapat();
-    if (okey.acik) okeyKapat();
     if (event.code === 4001 || event.code === 4003) {
       toast('Bu oturum kapatıldı');
       setTimeout(() => location.reload(), 1200);
@@ -1325,6 +1351,14 @@ function handleSocket(msg) {
       if (msg.online) state.online.add(msg.userId);
       else state.online.delete(msg.userId);
       renderMembersSide();
+      break;
+    }
+    case 'pong': {
+      if (typeof msg.t === 'number') {
+        lastWsPing = Math.max(1, Math.round(performance.now() - msg.t));
+        const selfEl = $('voice-ping');
+        if (selfEl && voice.channelId) selfEl.textContent = `${lastWsPing} ms`;
+      }
       break;
     }
     case 'voice_state': {
@@ -1416,24 +1450,6 @@ function handleSocket(msg) {
     }
     case 'satranc_dolu':
       toast('Satranç odası dolu (2 kişi)');
-      break;
-    case 'okey_state': {
-      if (Number(msg.channelId) !== okey.kanal) break;
-      okey.durum = msg.durum;
-      okey.secili = null;
-      okeyRender();
-      if (msg.kazanan) {
-        const kazanan = msg.durum?.players?.find((p) => p.userId === msg.kazanan);
-        const ad = kazanan?.name || 'Biri';
-        const puanlar = Object.entries(msg.puan || {})
-          .map(([id, p]) => `${msg.durum?.players?.find((x) => x.userId === Number(id))?.name || '?'}: ${p}`)
-          .join(', ');
-        toast(`🀄 ${ad} el açtı! ${puanlar ? 'Rakipler: ' + puanlar : ''}`);
-      }
-      break;
-    }
-    case 'okey_dolu':
-      toast('Okey masası dolu (4 kişi)');
       break;
     default:
       break;
@@ -1619,7 +1635,6 @@ function renderVoice() {
     filmModuKapat();
     if (ciz.acik) cizKapat();
     if (satranc.acik) satrancKapat();
-    if (okey.acik) okeyKapat();
     renderMembersSide();
     return;
   }
@@ -1628,6 +1643,12 @@ function renderVoice() {
   // Ayarlar paneli kullanıcı açmadıkça kapalı kalır (btn-vs-side / btn-close-vside).
   const participants = state.voice[channelId] || [];
   $('voice-count').textContent = `${participants.length} kişi`;
+  const selfState = participants.find((u) => u.userId === state.me?.id);
+  const vPing = $('voice-ping');
+  if (vPing) {
+    const val = typeof selfState?.ping === 'number' ? selfState.ping : lastWsPing;
+    vPing.textContent = val ? `${val} ms` : '';
+  }
   const activeSpeakers = new Set((voice.activeSpeakers || []).map(String));
 
   renderPeerChips(participants, activeSpeakers);
@@ -1740,6 +1761,18 @@ function renderPeerChips(participants, activeSpeakers) {
       if (camOn) icons.append(el('span', 'pico vid', '🎥'));
       if (screenOn) icons.append(el('span', 'pico scr', '🖥'));
     }
+
+    let pingEl = chip.querySelector('.chip-ping');
+    if (typeof p.ping === 'number' && p.ping >= 0) {
+      if (!pingEl) {
+        pingEl = el('span', 'chip-ping');
+        chip.append(pingEl);
+      }
+      pingEl.textContent = `${p.ping}ms`;
+      pingEl.className = `chip-ping ${p.ping < 65 ? 'good' : p.ping < 150 ? 'fair' : 'bad'}`;
+    } else if (pingEl) {
+      pingEl.remove();
+    }
   }
   for (const [id, chip] of voiceDom.peers) {
     if (!seen.has(id)) { chip.remove(); voiceDom.peers.delete(id); }
@@ -1779,7 +1812,8 @@ function renderSidePeople(participants, activeSpeakers) {
     const smallEl = row.querySelector('small');
     const volume = voice.volumes.get(id);
     const volumeText = volume !== undefined && volume !== 1 ? ` · ses %${Math.round(volume * 100)}` : '';
-    const wantInfo = info + volumeText;
+    const pingText = typeof p.ping === 'number' && p.ping >= 0 ? ` · ${p.ping} ms` : '';
+    const wantInfo = info + volumeText + pingText;
     if (smallEl.textContent !== wantInfo) smallEl.textContent = wantInfo;
     row.classList.toggle('speaking', activeSpeakers.has(id));
   }
@@ -1831,6 +1865,12 @@ function renderMembersSide() {
       mhead.append(mname);
       const tag = roleTagNode(user.role, isBot);
       if (tag) mhead.append(tag);
+      if (typeof p.ping === 'number' && p.ping >= 0) {
+        const pCls = p.ping < 65 ? 'good' : p.ping < 150 ? 'fair' : 'bad';
+        const pBadge = el('span', `peer-ping ${pCls}`, `${p.ping} ms`);
+        pBadge.title = `Gecikme (ping): ${p.ping} ms`;
+        mhead.append(pBadge);
+      }
       minfo.append(mhead);
 
       let subText = 'Çevrimiçi';
@@ -1964,6 +2004,27 @@ function renderStage(participants) {
           tile.append(vol);
         }
       }
+      const ref = el('button', 'trefresh', '🔄');
+      ref.type = 'button';
+      ref.title = 'Yenile (bağlantı ve ekran)';
+      ref.setAttribute('aria-label', 'Yenile');
+      ref.addEventListener('click', (event) => {
+        event.stopPropagation();
+        sesYenile();
+      });
+      tile.append(ref);
+
+      const chatBtn = el('button', 'tchat', '💬');
+      chatBtn.type = 'button';
+      chatBtn.title = 'Sohbet paneli';
+      chatBtn.setAttribute('aria-label', 'Sohbet');
+      chatBtn.classList.toggle('active', cside.acik);
+      chatBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        chatSideTikla();
+      });
+      tile.append(chatBtn);
+
       const btn = el('button', 'tmax', '⤢');
       btn.type = 'button';
       btn.setAttribute('aria-label', 'Tam ekran');
@@ -1975,7 +2036,9 @@ function renderStage(participants) {
     if (item.kind === 'screen') ekranFitUygula(tile, item.userId);
     const user = state.users.get(item.userId);
     const who = item.userId === state.me.id ? 'Sen' : (user?.displayName || '');
-    const label = item.kind === 'screen' ? `${who} ekranı` : who;
+    const uState = (state.voice[voice.channelId] || []).find((u) => u.userId === item.userId);
+    const pingSuffix = typeof uState?.ping === 'number' ? ` · ${uState.ping} ms` : '';
+    const label = (item.kind === 'screen' ? `${who} ekranı` : who) + pingSuffix;
     const nameEl = tile.querySelector('.tname');
     if (nameEl.textContent !== label) nameEl.textContent = label;
     tile.classList.toggle('max', voiceDom.maximized === item.key);
@@ -2422,9 +2485,34 @@ $('btn-leave').addEventListener('click', async () => {
   voiceDom.maximized = null;
   if (ciz.acik) cizKapat();
   if (satranc.acik) satrancKapat();
-  if (okey.acik) okeyKapat();
   renderVoice();
 });
+
+async function sesYenile() {
+  if (!voice.channelId) return;
+  const vbtn = $('btn-voice-refresh');
+  const span = vbtn?.querySelector('span');
+  if (span) span.textContent = 'Yenileniyor...';
+  try {
+    if (voice.mod?.yenile) {
+      await voice.mod.yenile();
+    }
+    document.querySelectorAll('.stage video').forEach((v) => {
+      try { v.play().catch(() => {}); } catch {}
+    });
+    document.querySelectorAll('audio[data-peer]').forEach((a) => {
+      try { a.play().catch(() => {}); } catch {}
+    });
+    renderVoice();
+    if (span) span.textContent = '✓ Yenilendi';
+    setTimeout(() => { if (span) span.textContent = 'Yenile'; }, 1500);
+  } catch {
+    if (span) span.textContent = 'Yenile';
+  }
+}
+
+$('btn-voice-refresh')?.addEventListener('click', sesYenile);
+$('btn-vchat')?.addEventListener('click', chatSideTikla);
 
 /* ==================== KİŞİ SES SEVİYESİ ==================== */
 let audioTargetId = null;
@@ -2590,10 +2678,39 @@ function renderCameraSelects() {
 }
 
 /// Ekran paylasimi ayarlari (cozunurluk/kare hizi, ses kaynagi, kodek).
+// Etiket tarayiciya gore degisir: Edge `systemAudio` tanimadigi icin orada
+// "Bu sekmeyi paylas" secenegi gerekir; Chrome'da "Sekme/Tum ekran".
+const EDGE_TARAYICI = /Edg\//.test(navigator.userAgent || '');
 const SHARE_AUDIO_FIXED = [
-  { id: 'sistem', label: 'Sistem sesi (paylaşırken seçilir)' },
+  {
+    id: 'sistem',
+    label: EDGE_TARAYICI
+      ? 'Sistem sesi (Bu sekmeyi paylaş, kutuyu işaretle)'
+      : 'Sistem sesi (Sekme/Tüm ekran seç, kutuyu işaretle)'
+  },
   { id: 'yok', label: 'Ses gönderme' }
 ];
+
+// Sanal ses cihazlari (Voicemeeter, VB-Cable, Stereo Mix...). Bunlar sistem
+// sesini yakalamanin EN SAGLAM yoludur: Chrome'un "sekme sesi" ozelligi,
+// varsayilan cikis Voicemeeter gibi bir sanal aygit oldugunda BOS doner
+// (loopback sanal girisi dinler). Bu cihazlar dogrudan secilerek ses alinir.
+const SANAL_SES_DESENI = /voicemeeter|cable output|cable input|stereo mix|stereomix|what u hear|sanal|virtual|vb-audio|blackhole|soundflower|loopback/i;
+
+/// Ekran sesi icin ses cihazi listesini uretir. Sanal ses cihazlari en uste
+/// alinir ve "[Sistem sesi]" etiketiyle isaretlenir; boylece kullanici hangi
+/// cihazin sistem sesini yakaladigini kolayca bulur.
+function siralaShareMics(mics) {
+  const puanla = (m) => (SANAL_SES_DESENI.test(m.label || '') ? 0 : 1);
+  return [...mics]
+    .sort((a, b) => puanla(a) - puanla(b))
+    .map((mic) => ({
+      id: 'aygit:' + mic.id,
+      label: SANAL_SES_DESENI.test(mic.label || '')
+        ? `[Sistem sesi] ${mic.label}`
+        : 'Aygıt: ' + mic.label
+    }));
+}
 
 function renderShareSelects() {
   const wrap = $('vs-share');
@@ -2616,7 +2733,7 @@ function renderShareSelects() {
   );
   fillSelect(
     $('sel-share-audio'),
-    [...SHARE_AUDIO_FIXED, ...(voice.shareMics || []).map((mic) => ({ id: 'aygit:' + mic.id, label: 'Aygıt: ' + mic.label }))],
+    [...SHARE_AUDIO_FIXED, ...siralaShareMics(voice.shareMics || [])],
     voice.shareAudio || settings.audioSource,
     'Ses seçilemedi'
   );
@@ -3689,7 +3806,6 @@ function satrancAc() {
   satranc.kanal = voice.channelId;
   $('screen-satranc').hidden = false;
   cizKapat();
-  okeyKapat();
   satrancGonder({ op: 'satranc_join', channelId: satranc.kanal });
 }
 
@@ -3880,125 +3996,6 @@ function satrancHamle(hamle) {
   satrancGonder({ op: 'satranc_move', channelId: satranc.kanal, from: hamle.from, to: hamle.to });
 }
 
-/* ==================== OKEY ==================== */
-const OKEY_RENK_RENK = { k: '#ef4444', s: '#facc15', m: '#3b82f6', a: '#e5e7eb' };
-
-function okeyAc() {
-  if (!voice.channelId) { toast('Önce bir sesli kanala gir'); return; }
-  if (okey.acik) return;
-  okey.acik = true;
-  okey.kanal = voice.channelId;
-  $('screen-okey').hidden = false;
-  cizKapat();
-  satrancKapat();
-  okeyGonder({ op: 'okey_join', channelId: okey.kanal });
-}
-
-function okeyKapat() {
-  if (!okey.acik) return;
-  okeyGonder({ op: 'okey_leave', channelId: okey.kanal });
-  okey.acik = false;
-  okey.kanal = null;
-  okey.durum = null;
-  okey.secili = null;
-  $('screen-okey').hidden = true;
-}
-
-function okeyGonder(payload) {
-  if (state.socket?.readyState === WebSocket.OPEN) state.socket.send(JSON.stringify(payload));
-}
-
-function okeyTasEtiket(tas) {
-  if (tas === 'j1' || tas === 'j2') return '★';
-  return tas.slice(1);
-}
-
-function okeyTasEl(tas, okeyMi) {
-  const btn = el('button', 'okey-tas' + (okeyMi ? ' okey' : ''));
-  btn.type = 'button';
-  btn.dataset.tas = tas;
-  const renk = tas[0];
-  btn.style.color = OKEY_RENK_RENK[renk] || '#e5e7eb';
-  btn.textContent = okeyTasEtiket(tas);
-  return btn;
-}
-
-function okeyTasSiralama(a, b) {
-  const ra = a[0], rb = b[0];
-  const na = a === 'j1' || a === 'j2' ? 0 : Number(a.slice(1));
-  const nb = b === 'j1' || b === 'j2' ? 0 : Number(b.slice(1));
-  if (ra !== rb) return ra < rb ? -1 : 1;
-  return na - nb;
-}
-
-function okeyRender() {
-  const d = okey.durum;
-  if (!d) return;
-  const oyuncular = $('okey-oyuncular');
-  oyuncular.innerHTML = '';
-  for (const p of d.players) {
-    const chip = el('div', 'okey-kisi' + (p.userId === d.turn ? ' sira' : '') + (p.userId === d.kazanan ? ' kazandi' : ''));
-    const ad = p.userId === state.me?.id ? 'Sen' : p.name;
-    chip.append(el('span', null, `${ad} (${p.tasSayisi} taş)`));
-    if (p.roundWins > 0) chip.append(el('span', 'okey-galibiyet', `🏆${p.roundWins}`));
-    oyuncular.append(chip);
-  }
-  const gosterge = $('okey-gosterge');
-  gosterge.innerHTML = '';
-  if (d.gosterge) {
-    gosterge.append(el('div', 'okey-etiket', 'Gösterge'));
-    gosterge.append(okeyTasEl(d.gosterge));
-    gosterge.append(el('div', 'okey-etiket', 'Okey'));
-    gosterge.append(okeyTasEl(d.okey, true));
-  }
-  const orta = $('okey-orta');
-  orta.innerHTML = '';
-  const cekebilir = d.state === 'oyun' && d.turn === state.me?.id && !d.cekti;
-  const duvar = el('button', 'okey-duvar', `🂠 ${d.wallCount}`);
-  duvar.type = 'button';
-  duvar.title = 'Duvar (taş çek)';
-  duvar.disabled = !cekebilir;
-  duvar.addEventListener('click', () => okeyGonder({ op: 'okey_cekim', channelId: okey.kanal, kaynak: 'duvar' }));
-  orta.append(duvar);
-  if (d.sonAtilan) {
-    const cope = el('button', 'okey-cope', '');
-    cope.type = 'button';
-    cope.title = 'Çöpten al';
-    cope.append(okeyTasEl(d.sonAtilan));
-    cope.disabled = !cekebilir;
-    cope.addEventListener('click', () => okeyGonder({ op: 'okey_cekim', channelId: okey.kanal, kaynak: 'cope' }));
-    orta.append(cope);
-  }
-  const elKutu = $('okey-el');
-  elKutu.innerHTML = '';
-  if (d.el) {
-    const sirali = [...d.el].sort(okeyTasSiralama);
-    for (const tas of sirali) {
-      const btn = okeyTasEl(tas, tas === d.okey || tas === 'j1' || tas === 'j2');
-      btn.classList.add('okey-el-tas');
-      if (okey.secili === tas) btn.classList.add('secili');
-      btn.addEventListener('click', () => {
-        if (d.state !== 'oyun' || d.turn !== state.me?.id || !d.cekti) return;
-        okey.secili = okey.secili === tas ? null : tas;
-        okeyRender();
-      });
-      elKutu.append(btn);
-    }
-  }
-  const durumEl = $('okey-durum');
-  if (d.state === 'bekliyor') durumEl.textContent = `${d.players.length}/4 oyuncu — Başlat'a bas`;
-  else if (d.state === 'oyun') {
-    const sira = d.players.find((p) => p.userId === d.turn);
-    durumEl.textContent = d.turn === state.me?.id ? (d.cekti ? 'Sıra sende — taş at' : 'Sıra sende — taş çek') : `${sira?.name || 'Rakip'} oynuyor`;
-  } else if (d.state === 'bitti') {
-    const kazanan = d.players.find((p) => p.userId === d.kazanan);
-    durumEl.textContent = `${kazanan?.name || 'Biri'} el açtı!`;
-  }
-  $('btn-okey-basla').hidden = d.state === 'oyun';
-  $('btn-okey-at').hidden = !(d.state === 'oyun' && d.turn === state.me?.id && d.cekti);
-  $('btn-okey-elac').hidden = !(d.state === 'oyun' && d.turn === state.me?.id && d.cekti);
-}
-
 $('btn-satranc').addEventListener('click', satrancAc);
 $('btn-satranc-close').addEventListener('click', satrancKapat);
 $('btn-satranc-basla').addEventListener('click', () => {
@@ -4006,21 +4003,6 @@ $('btn-satranc-basla').addEventListener('click', () => {
   satrancGonder({ op: 'satranc_basla', channelId: satranc.kanal });
 });
 $('btn-satranc-terk').addEventListener('click', satrancKapat);
-$('btn-okey').addEventListener('click', okeyAc);
-$('btn-okey-close').addEventListener('click', okeyKapat);
-$('btn-okey-ayril').addEventListener('click', okeyKapat);
-$('btn-okey-basla').addEventListener('click', () => {
-  if (!okey.acik) return;
-  okeyGonder({ op: 'okey_basla', channelId: okey.kanal });
-});
-$('btn-okey-at').addEventListener('click', () => {
-  if (!okey.acik || !okey.secili) return;
-  okeyGonder({ op: 'okey_at', channelId: okey.kanal, tas: okey.secili });
-});
-$('btn-okey-elac').addEventListener('click', () => {
-  if (!okey.acik) return;
-  okeyGonder({ op: 'okey_elac', channelId: okey.kanal });
-});
 
 /* ==================== BAŞLAT ==================== */
 window.addEventListener('resize', () => {

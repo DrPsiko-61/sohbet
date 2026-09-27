@@ -99,7 +99,7 @@
       <button id="btn-members-toggle" class="icon-btn" aria-label="Üye listesi" type="button" title="Üye listesi">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       </button>
-      <button id="btn-chat-side" class="icon-btn only-mobile" aria-label="Sohbet paneli" type="button" title="Sohbet paneli">
+      <button id="btn-chat-side" class="icon-btn" aria-label="Sohbet paneli" type="button" title="Sohbet paneli">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.3 8.9 8.9 0 0 1-3.8-.9L3 20l1.2-5.4A8.1 8.1 0 0 1 3.5 11.5 8.4 8.4 0 0 1 12 3.2a8.4 8.4 0 0 1 9 8.3Z"/></svg>
       </button>
     </header>
@@ -145,6 +145,7 @@
         <span class="voice-dot"></span>
         <strong id="voice-label">Sesli kanal</strong>
         <span id="voice-count" class="muted"></span>
+        <span id="voice-ping" class="voice-ping" title="Kendi gecikmeniz"></span>
       </div>
       <div id="voice-peers" class="voice-peers"></div>
       <div class="voicebar-actions">
@@ -158,7 +159,8 @@
         <button id="btn-card" class="vbtn" type="button" hidden><span>Capture card</span></button>
         <button id="btn-ciz" class="vbtn ciz" type="button" title="Ortak çizim tahtası"><span>Çiz</span></button>
         <button id="btn-satranc" class="vbtn" type="button" title="Satranç"><span>♞ Satranç</span></button>
-        <button id="btn-okey" class="vbtn" type="button" title="Okey"><span>🀄 Okey</span></button>
+        <button id="btn-voice-refresh" class="vbtn refresh" type="button" title="Bağlantıyı ve ekran paylaşımını yenile"><span>Yenile</span></button>
+        <button id="btn-vchat" class="vbtn vchat" type="button" title="Sohbet paneli"><span>Sohbet</span></button>
         <button id="btn-vs-side" class="vbtn" type="button"><span>Ayarlar</span></button>
         <button id="btn-audio" class="vbtn warn" type="button" hidden><span>Sesi başlat</span></button>
         <button id="btn-leave" class="vbtn danger" type="button"><span>Ayrıl</span></button>
@@ -207,6 +209,10 @@
         <h4>Cihazlar</h4>
         <label class="field"><span>Mikrofon</span><select id="sel-mic"></select></label>
         <label class="field"><span>Kamera</span><select id="sel-cam"></select></label>
+        <label class="field">
+          <span>Mikrofon sesi: <b id="mic-gain-val">100%</b></span>
+          <input id="mic-gain-range" type="range" min="0" max="300" step="10" value="100">
+        </label>
         <p class="muted" id="dev-msg" hidden></p>
       </div>
       <div id="vs-ptt" class="vs-devices" hidden>
@@ -236,6 +242,10 @@
         <label class="field"><span>Çözünürlük · kare hızı</span><select id="sel-share-quality"></select></label>
         <label class="field"><span>Paylaşılacak ses</span><select id="sel-share-audio"></select></label>
         <label class="field"><span>Görüntü kodeği</span><select id="sel-share-codec"></select></label>
+        <label class="field">
+          <span>Paylaşılan ses seviyesi: <b id="share-gain-val">100%</b></span>
+          <input id="share-gain-range" type="range" min="0" max="300" step="10" value="100">
+        </label>
         <p class="muted" id="share-msg" hidden></p>
       </div>
       <div id="vs-card" class="vs-devices" hidden>
@@ -390,33 +400,8 @@
   </div>
 </section>
 
-<!-- ==================== OKEY ==================== -->
-<section id="screen-okey" class="screen sheet" hidden>
-  <div class="sheet-card oyun-card">
-    <div class="oyun-head">
-      <h2>🀄 Okey</h2>
-      <span id="okey-durum" class="muted"></span>
-      <button id="btn-okey-close" class="icon-btn" type="button" aria-label="Okeyi kapat" title="Kapat">
-        <svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
-      </button>
-    </div>
-    <div id="okey-oyuncular" class="oyun-oyuncular"></div>
-    <div class="okey-masa">
-      <div id="okey-gosterge" class="okey-gosterge"></div>
-      <div id="okey-orta" class="okey-orta"></div>
-    </div>
-    <div id="okey-el" class="okey-el"></div>
-    <div class="oyun-actions">
-      <button id="btn-okey-basla" class="vbtn" type="button"><span>Başlat</span></button>
-      <button id="btn-okey-at" class="vbtn" type="button" hidden><span>Taş at</span></button>
-      <button id="btn-okey-elac" class="vbtn" type="button" hidden><span>El aç</span></button>
-      <button id="btn-okey-ayril" class="vbtn danger" type="button"><span>Ayrıl</span></button>
-    </div>
-  </div>
-</section>
-
 <div id="toast" class="toast" hidden></div>
 
-<script src="/app.js?v=49" type="module"></script>
+<script src="/app.js?v=58" type="module"></script>
 </body>
 </html>

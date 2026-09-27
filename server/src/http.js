@@ -8,6 +8,7 @@ import {
 } from './auth.js'
 import { createVoiceToken, verifyWebhook, rtcEnabled } from './rtc.js'
 import { muzikKomut } from './bot.js'
+import { heleleleKomut } from './helelele.js'
 
 const DATA_DIR = process.env.DATA_DIR || './data'
 const FILES_DIR = join(DATA_DIR, 'files')
@@ -376,6 +377,8 @@ export function buildRoutes({ hub }) {
     }
     // "!" ile baslayan mesajlar muzik botu komutu olabilir.
     muzikKomut({ metin: content, user, kanal: channel })
+    // "zehra" yazilirsa Helelele botu resmi atar.
+    heleleleKomut({ metin: content, kanal: channel })
     return send(res, 201, { message: payload })
   }))
 

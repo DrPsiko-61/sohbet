@@ -1,27 +1,27 @@
-# Sohbet uygulamasi systemd servisi.
-# install.sh bu sablonu /etc/systemd/system/sohbet.service olarak yazar
-# ({KULLANICI} ve {KOK} yerlerini doldurur).
 [Unit]
 Description=Sohbet uygulamasi (Node)
+Documentation=file:///home/psiko/sohbet/README.md
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User={KULLANICI}
-Group={KULLANICI}
-WorkingDirectory={KOK}/server
-EnvironmentFile={KOK}/deploy/.env
-ExecStart=/usr/bin/node --no-warnings {KOK}/server/src/index.js
+User=psiko
+Group=psiko
+WorkingDirectory=/home/psiko/sohbet/server
+EnvironmentFile=/home/psiko/sohbet/deploy/.env
+ExecStart=__NODE_BIN__ --no-warnings /home/psiko/sohbet/server/src/index.js
 Restart=always
 RestartSec=3
+# Bant genisligi ve bellek sinirlari
 LimitNOFILE=65536
 MemoryMax=512M
+# Guvenlik sikilastirmalari
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=read-only
-ReadWritePaths={KOK}/data
+ReadWritePaths=/home/psiko/sohbet/data
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true

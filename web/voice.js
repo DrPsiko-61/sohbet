@@ -56,6 +56,31 @@ const SHARE_AUDIO_DEFAULT = 'sistem';
 // kullanilir.
 const SCREEN_AUDIO_BITRATE = 128000;
 
+// --- Tarayici tespiti (ekran sesi icin) ------------------------------------
+// Chrome ve Edge, sistem sesini FARKLI sekilde ister:
+//   * Chrome: getDisplayMedia({ systemAudio: 'include' }) ile "sesi de paylas"
+//     kutusu otomatik isaretlenir. `audio: true` ile birlikte verilirse ses izi
+//     bazi surumlerde hic olusmaz.
+//   * Edge: `systemAudio` kisitini TANIMAZ (getSupportedConstraints icinde yok).
+//     Edge'e `systemAudio` gonderilirse getDisplayMedia NotSupportedError ile
+//     patlar ve ekran paylasimi hic baslamaz. Edge'de sistem sesi `audio: true`
+//     ile istenir; kullaniciya "Bu sekmeyi paylas" seceneginde ses kutusu cikar.
+// Bu yuzden tarayiciya gore dogru anahtar secilir.
+const IS_EDGE = typeof navigator !== 'undefined' && /Edg\//.test(navigator.userAgent || '');
+const IS_CHROMIUM = typeof navigator !== 'undefined' && /Chrome\//.test(navigator.userAgent || '');
+
+/// Tarayicinin `systemAudio` kisitini destekleyip desteklemedigini soyler.
+/// Edge tanimaz; Chrome (ve Chromium tabanli digerleri) tanir.
+function systemAudioSupported() {
+  if (IS_EDGE) return false;
+  try {
+    const c = navigator.mediaDevices?.getSupportedConstraints?.();
+    if (c && 'systemAudio' in c) return true;
+  } catch {}
+  // Kisit listesi okunamadiysa Chromium varsayimiyla devam et.
+  return IS_CHROMIUM;
+}
+
 // --- Kamera ----------------------------------------------------------------
 // Kamera acilirken kullanicinin sectigi kalite. Cozunurlukler IDEAL olarak
 // verilir: tarayici kameranin destekledigi en yakin degeri secer. Boylece zayif
@@ -100,6 +125,9 @@ let cardTrack = null;
 let cardAudioTrack = null;
 // Ayri bir ses aygiti secildiginde yakalanan iz; paylasim bitince durdurulur.
 let shareAudioTrack = null;
+// Ekran sesi icin kullaniciya uyari verildi mi? Otomatik yakalama sirasinda
+// verilen uyari ile reportScreenAudio'nun uyarisi cakismasin diye tutulur.
+let shareAudioUyarildi = false;
 
 /// Telefonda ekran paylasimi acikken telefonu yatay konuma kilitler. Ekran
 /// paylasiminin dogal yonu yatay oldugu icin hem paylasan hem izleyen icin
@@ -141,6 +169,8 @@ export function getShareSettings() {
     quality: shareQuality,
     codec: shareCodec,
     audioSource: shareAudioSource,
+    micGain,
+    shareGain,
     qualities: Object.entries(SHARE_QUALITIES).map(([key, value]) => ({ key, label: value.label })),
     codecs: Object.entries(SHARE_CODECS).map(([key, value]) => ({ key, label: value.label }))
   };
@@ -155,6 +185,14 @@ let onError = () => {};
 let pendingTracks = new Map();
 let reconnecting = false;
 
+// YENIDEN BAGLANMA: baglanti koptugunda (Disconnected) kullanici kendisi
+// ayrilmadiysa ve kanal gecerliyse artan bekleme ile otomatik yeniden
+// baglanilir. Beklemeler: 2s, 4s, 8s, 16s, 30s (en fazla 5 deneme).
+let kapaniyor = false;
+let yenidenBaglanmaSayaci = 0;
+let yenidenBaglanmaZamanlayici = null;
+const YENIDEN_BAGLANMA_BEKLEMELERI = [2000, 4000, 8000, 16000, 30000];
+
 // ON-ARKA KAMERA: mobilde varsayilan on kamera. Cevirme islemi restartTrack ile
 // yapilir; yayin kesilmeden yeni kamera ile devam eder.
 let facing = 'user';
@@ -168,6 +206,18 @@ const gains = new Map();
 // Ekran paylasimi sesinin kisi basina seviyesi (izleyen icin, 0..2).
 const screenVolumes = new Map();
 let audioCtx = null;
+
+// GONDERICI TARAFLI SES GUCLENDIRME: kullanici kendi mikrofonunu / ekran
+// sesini yukseltip gonderebilir (1 = normal, 0..3). Orijinal track bir
+// AudioContext + GainNode uzerinden gecirilir; cikistan uretilen yeni track
+// LiveKit'e yayinlanir (replaceTrack ile). Gain 1 iken zincir kurulmaz;
+// kurulduktan sonra deger degisince yalnizca gain.gain.value guncellenir.
+let micGain = 1;
+let shareGain = 1;
+let micGainNode = null;
+let shareGainNode = null;
+let micSourceTrack = null;
+let shareSourceTrack = null;
 
 const isTouch = typeof window !== 'undefined' &&
   (window.matchMedia?.('(pointer: coarse)')?.matches || 'ontouchstart' in window);
@@ -219,6 +269,11 @@ export async function join(options) {
   onState = options.onState || (() => {});
   onError = options.onError || (() => {});
 
+  // Yeni katilim: ayrilma bayragi sifirlanir, bekleyen yeniden baglanma
+  // zamanlayicisi iptal edilir (cifte baglanma olmasin).
+  kapaniyor = false;
+  clearTimeout(yenidenBaglanmaZamanlayici);
+
   const res = await fetch(`/api/channels/${channelId}/voice-token`, {
     method: 'POST',
     credentials: 'same-origin'
@@ -241,6 +296,16 @@ export async function join(options) {
     adaptiveStream: false,
     dynacast: true,
     disconnectOnPageLeave: false,
+    // Baglanti koptugunda SDK'nin kendi yeniden baglanma politikasi: ilk
+    // denemeler hizli, sonra ussel geri cekilme ile artar, ust sinir 10 sn.
+    // 10 denemeden sonra vazgecilir; Disconnected olayi tetiklenir ve asagidaki
+    // manuel yeniden baglanma (yenidenBaglan) devreye girer.
+    reconnectPolicy: {
+      nextRetryDelayInMs: (context) => {
+        if (context.retryCount >= 10) return null;
+        return Math.min(1000 * Math.pow(1.5, context.retryCount), 10000);
+      }
+    },
     audioCaptureDefaults: {
       echoCancellation: true,
       noiseSuppression: true,
@@ -296,6 +361,16 @@ export async function join(options) {
         emit({ cam: true });
         refreshCameraCount();
       }
+      // Gonderici tarafi guclendirme: yeni mikrofon / ekran sesi izi yayina
+      // girince orijinal iz saklanir ve secili gain varsa uygulanir.
+      if (source === Track.Source.Microphone) {
+        micSourceTrack = publication.track?.mediaStreamTrack || null;
+        if (micGain !== 1) applySenderGain('mic', micGain);
+      }
+      if (source === Track.Source.ScreenShareAudio) {
+        shareSourceTrack = publication.track?.mediaStreamTrack || null;
+        if (shareGain !== 1) applySenderGain('share', shareGain);
+      }
     })
     .on(RoomEvent.LocalTrackUnpublished, (publication) => {
       dropTrack(room.localParticipant.identity, publication.source, Track);
@@ -307,6 +382,22 @@ export async function join(options) {
         emit({ screen: false });
       }
       if (publication.source === Track.Source.Camera) emit({ cam: false });
+      // Mikrofon / ekran sesi yayindan kalkinca gain zinciri ve orijinal iz
+      // temizlenir (mikrofon LED'i yanmasin diye orijinal iz de durdurulur).
+      if (publication.source === Track.Source.Microphone) {
+        temizleGain('mic');
+        if (micSourceTrack) {
+          try { micSourceTrack.stop(); } catch {}
+          micSourceTrack = null;
+        }
+      }
+      if (publication.source === Track.Source.ScreenShareAudio) {
+        temizleGain('share');
+        if (shareSourceTrack) {
+          try { shareSourceTrack.stop(); } catch {}
+          shareSourceTrack = null;
+        }
+      }
     })
     .on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
       emit({ activeSpeakers: speakers.map((s) => s.identity) });
@@ -319,15 +410,20 @@ export async function join(options) {
     })
     .on(RoomEvent.Reconnecting, () => {
       reconnecting = true;
-      onError('Bağlantı zayıf, yeniden bağlanılıyor…');
+      emit({ reconnecting: true });
+      onError('Bağlantı koptu, yeniden bağlanılıyor...');
     })
     .on(RoomEvent.Reconnected, () => {
       reconnecting = false;
+      emit({ reconnecting: false });
       syncVoiceState();
     })
     .on(RoomEvent.Disconnected, () => {
       reconnecting = false;
       emit({ channelId: null, mic: false, cam: false, screen: false, torch: false });
+      // Kullanici kendisi ayrildiysa (leave) yeniden baglanma denenmez;
+      // aksi halde artan bekleme ile otomatik yeniden baglanilir.
+      if (!kapaniyor && channelId) yenidenBaglan();
     })
     .on(RoomEvent.AudioPlaybackStatusChanged, () => {
       // Tarayici ses oynatimi engellediyse arayuz "dokun ve baslat" gosterir.
@@ -339,6 +435,9 @@ export async function join(options) {
     });
 
   await room.connect(data.url || location.origin, data.token);
+  // Baglanti basarili: yeniden baglanma sayaci sifirlanir (sonraki kopmada
+  // beklemeler bastan baslar).
+  yenidenBaglanmaSayaci = 0;
 
   try {
     await room.startAudio();
@@ -350,6 +449,10 @@ export async function join(options) {
     autoGainControl: true,
     channelCount: 1
   });
+
+  // Varsayilan mikrofon Voicemeeter gibi bir SANAL cikis ise ses hic gelmez
+  // (seviye 0). Kullaniciyi uyarip gercek bir mikrofon secmesini saglariz.
+  mikrofonSanalUyar();
 
   emit({ channelId, room, mic: true, cam: false, screen: false, facing, cameraQuality, torch: false });
   send?.({ op: 'voice_join', channelId, muted: false, video: false, screen: false });
@@ -373,6 +476,33 @@ export async function join(options) {
   emit({ needsTapForAudio: Boolean(!room.canPlaybackAudio) });
 
   return room;
+}
+
+/// Baglanti koptugunda (Disconnected) otomatik yeniden baglanma. Kullanici
+/// kendisi ayrilmadiysa ve kanal gecerliyse artan bekleme ile join tekrar
+/// cagrilir; en fazla 5 deneme (2s, 4s, 8s, 16s, 30s). Basarili olursa sayac
+/// sifirlanir.
+async function yenidenBaglan() {
+  if (kapaniyor || !channelId) return;
+  if (yenidenBaglanmaSayaci >= YENIDEN_BAGLANMA_BEKLEMELERI.length) {
+    yenidenBaglanmaSayaci = 0;
+    onError('Bağlantı koptu ve yeniden bağlanılamadı. Lütfen tekrar katıl');
+    return;
+  }
+  const bekleme = YENIDEN_BAGLANMA_BEKLEMELERI[yenidenBaglanmaSayaci];
+  yenidenBaglanmaSayaci++;
+  onError('Bağlantı koptu, yeniden bağlanılıyor...');
+  clearTimeout(yenidenBaglanmaZamanlayici);
+  yenidenBaglanmaZamanlayici = setTimeout(async () => {
+    if (kapaniyor || !channelId) return;
+    try {
+      await join({ channelId, send, onState, onError });
+      yenidenBaglanmaSayaci = 0;
+    } catch (error) {
+      // Bu deneme basarisiz: siradaki bekleme ile tekrar dene.
+      yenidenBaglan();
+    }
+  }, bekleme);
 }
 
 /// Bir katilimcinin belirli bir kaynaga (kamera/ekran/mikrofon) ait yayinini bulur.
@@ -1359,11 +1489,133 @@ export async function switchMicDevice(deviceId) {
   if (!room) return false;
   try {
     await room.switchActiveDevice('audioinput', deviceId);
+    // Cihaz degisince mikrofon izi yeniden baslar; gain zinciri yeni izle
+    // yeniden kurulur (eski zincir kaldirilir).
+    const pub = pubFor(room.localParticipant, lib.Track.Source.Microphone);
+    micSourceTrack = pub?.track?.mediaStreamTrack || null;
+    if (micGainNode) {
+      temizleGain('mic');
+      if (micGain !== 1) await applySenderGain('mic', micGain);
+    }
     return true;
   } catch (error) {
     onError('Mikrofon değiştirilemedi: ' + (error.message || ''));
     return false;
   }
+}
+
+/* ==================== GONDERICI TARAFLI SES GUCLENDIRME ====================
+  Kullanici kendi mikrofonunu / ekran paylasimi sesini yukseltip gonderebilir
+  (1 = normal, 0..3). Orijinal MediaStreamTrack bir AudioContext + GainNode
+  uzerinden gecirilir; cikistan uretilen yeni track yayina konur. Gain 1 iken
+  zincir kurulmaz; kurulduktan sonra deger degisince yalnizca gain.gain.value
+  guncellenir (track degismez). */
+
+/// Gain zincirini kaldirir: kaynak baglantisini keser, gain dugumunu ve cikis
+/// izini durdurur. Zincir parcalari gain dugumune eklenen gecici ozelliklerde
+/// tutulur (temizlikte hepsi bir arada kaldirilir).
+function temizleGain(kind) {
+  const node = kind === 'mic' ? micGainNode : shareGainNode;
+  if (!node) return;
+  try { node._kaynak?.disconnect(); } catch {}
+  try { node.disconnect(); } catch {}
+  try { node._iz?.stop(); } catch {}
+  try { node._cikis?.disconnect(); } catch {}
+  if (kind === 'mic') micGainNode = null;
+  else shareGainNode = null;
+}
+
+/// Gonderici tarafi ses guclendirme uygular. 'mic' mikrofonu, 'share' ekran
+/// sesini yukseltir. value 0..3 arasina sikistirilir; 1 ise gain 1'e cekilir
+/// (zincir kaldirilmaz, sonraki degisimde track degismeden guncellenir).
+async function applySenderGain(kind, value) {
+  if (!room) return;
+  const v = Math.max(0, Math.min(3, Number(value) || 0));
+  if (kind === 'mic') micGain = v;
+  else shareGain = v;
+
+  const source = kind === 'mic' ? lib.Track.Source.Microphone : lib.Track.Source.ScreenShareAudio;
+  const pub = pubFor(room.localParticipant, source);
+  if (!pub?.track) return;
+
+  const orijinal = kind === 'mic' ? micSourceTrack : shareSourceTrack;
+  const gainNode = kind === 'mic' ? micGainNode : shareGainNode;
+
+  // Zincir zaten kurulu: track degismeden yalnizca gain degeri guncellenir.
+  if (gainNode) {
+    try { gainNode.gain.value = v; } catch {}
+    return;
+  }
+
+  // Zincir yok: orijinal iz yoksa yayindaki izden alinir.
+  const kaynakIz = orijinal || pub.track.mediaStreamTrack;
+  if (!kaynakIz) return;
+
+  const ctx = ensureAudioCtx();
+  if (!ctx) return;
+  try {
+    const kaynak = ctx.createMediaStreamSource(new MediaStream([kaynakIz]));
+    const gain = ctx.createGain();
+    gain.gain.value = v;
+    const cikis = ctx.createMediaStreamDestination();
+    kaynak.connect(gain);
+    gain.connect(cikis);
+    const yeniIz = cikis.stream.getAudioTracks()[0];
+    if (!yeniIz) return;
+    // Zincir parcalari gain dugumune baglanir; temizleGain hepsini kaldirir.
+    gain._kaynak = kaynak;
+    gain._cikis = cikis;
+    gain._iz = yeniIz;
+    if (kind === 'mic') micGainNode = gain;
+    else shareGainNode = gain;
+    // Yeni iz yayina konur. replaceTrack yoksa (eski SDK) yayin kaldirilip
+    // yeniden yayinlanir.
+    if (typeof pub.replaceTrack === 'function') {
+      await pub.replaceTrack(yeniIz, true);
+    } else {
+      await room.localParticipant.unpublishTrack(pub.track, false);
+      const secenekler = kind === 'mic'
+        ? {
+            source: lib.Track.Source.Microphone,
+            echoCancellation: true,
+            noiseSuppression: gurultuEngelle,
+            autoGainControl: true,
+            channelCount: 1
+          }
+        : {
+            source: lib.Track.Source.ScreenShareAudio,
+            audioPreset: { maxBitrate: SCREEN_AUDIO_BITRATE },
+            dtx: false,
+            red: true
+          };
+      await room.localParticipant.publishTrack(yeniIz, secenekler);
+    }
+  } catch (error) {
+    temizleGain(kind);
+    onError('Ses güçlendirme uygulanamadı: ' + (error.message || ''));
+  }
+}
+
+export function getMicGain() {
+  return micGain;
+}
+
+export function getShareGain() {
+  return shareGain;
+}
+
+/// Kendi mikrofon sesini yukseltir (0..3; 1 = normal). Mikrofon kapaliyken
+/// deger saklanir; mikrofon acilinca uygulanir.
+export async function setMicGain(value) {
+  await applySenderGain('mic', value);
+  return micGain;
+}
+
+/// Ekran paylasimi sesini yukseltir (0..3; 1 = normal). Paylasim kapaliyken
+/// deger saklanir; paylasim acilinca uygulanir.
+export async function setShareGain(value) {
+  await applySenderGain('share', value);
+  return shareGain;
 }
 
 /// Kamera cihazini degistirir. Kamera kapaliysa secim saklanir ve kamera
@@ -1441,9 +1693,30 @@ export async function toggleScreen(options = {}) {
     return;
   }
 
+  // ON KONTROL: tarayici ekran paylasimini desteklemiyorsa (getDisplayMedia
+  // yok) try/catch'e guvenmek yerine kullaniciya net mesaj verilir ve cikilir.
+  // Android Chrome destekler; iOS Safari desteklemez.
+  if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getDisplayMedia) {
+    if (isTouch && /iPad|iPhone|iPod/.test(navigator.userAgent || '')) {
+      onError('iPhone/iPad ekran paylaşımını desteklemiyor (iOS kısıtı). Android veya bilgisayar kullan');
+    } else {
+      onError('Bu cihaz ekran paylaşımını desteklemiyor. Android Chrome kullan veya tarayıcıyı güncelle');
+    }
+    return;
+  }
+
   const preset = sharePreset();
   const wantsSystemAudio = shareAudioSource === 'sistem';
   const deviceId = shareAudioSource.startsWith('aygit:') ? shareAudioSource.slice(6) : null;
+  // Her yeni paylasimda uyari durumu sifirlanir.
+  shareAudioUyarildi = false;
+  // Tarayici sistem sesini nasil istiyor? Edge `systemAudio` tanimaz; ona
+  // `audio: true` gonderilir. Chrome'da ise `systemAudio: 'include'` kullanilir
+  // ve `audio` anahtari HIC gonderilmez (birlikte verilince ses izi olusmuyor).
+  // Mobilde (isTouch) `systemAudio` yerine `audio: true` daha guvenlidir:
+  // Android Chrome `audio: true` ile sistem sesini verebilir.
+  const useSystemAudioKey = wantsSystemAudio && systemAudioSupported() && !isTouch;
+  const usePlainAudio = wantsSystemAudio && !useSystemAudioKey;
 
   try {
     await room.localParticipant.setScreenShareEnabled(
@@ -1452,7 +1725,15 @@ export async function toggleScreen(options = {}) {
         // Tarayici penceresindeki "sesi de paylas" kutusu yalnizca burada true
         // verilirse sorulur. Ayri bir ses aygiti secildiyse tarayicidan ses
         // istemeyiz; o izi asagida kendimiz yakalariz.
-        audio: wantsSystemAudio,
+        //
+        // ONEMLI: Chrome'da `audio: true` ile `systemAudio: 'include'` birlikte
+        // verildiginde sistem sesi izi bazi surumlerde HIC olusturulmuyor (ses
+        // sessizce dusuyor). Bu yuzden Chrome'da `audio` anahtari hic
+        // gonderilmez; ses yalnizca `systemAudio: 'include'` ile istenir.
+        // Edge'de ise tam tersi: `systemAudio` desteklenmedigi icin `audio: true`
+        // gonderilir.
+        ...(usePlainAudio ? { audio: true } : {}),
+        ...(wantsSystemAudio || deviceId ? {} : { audio: false }),
         // Yakalama olcegi. frameRate'in resolution ICINDE olmasi sart: LiveKit
         // getDisplayMedia kisitlarini yalnizca buradan uretir; ust seviyeye
         // yazilan frameRate yalnizca kodlayiciya uygulanir.
@@ -1466,8 +1747,9 @@ export async function toggleScreen(options = {}) {
         // ana sebeplerinden biri buydu. Film izlerken 'motion' gönderilir.
         contentHint: options.contentHint || 'text',
         // Chrome'da tam ekran / sekme paylasiminda "sistem sesi" kutusunu
-        // kendiliginden isaretler. Desteklemeyen tarayicilarda yok sayilir.
-        ...(wantsSystemAudio ? { systemAudio: 'include' } : {})
+        // kendiliginden isaretler. Edge ve desteklemeyen tarayicilarda
+        // gonderilmez (aksi halde getDisplayMedia hata verir).
+        ...(useSystemAudioKey ? { systemAudio: 'include' } : {})
       },
       {
         videoCodec: shareCodec,
@@ -1486,6 +1768,38 @@ export async function toggleScreen(options = {}) {
     // Ayri ses aygiti secildiyse onu ekran sesi olarak yayinla.
     if (deviceId) await publishShareDevice(deviceId);
 
+    // OTOMATIK SISTEM SESI: Kullanici "Sistem sesi" sectiyse ve tarayici ses
+    // izi vermediyse (Voicemeeter gibi sanal cikis varsayilan oldugunda Chrome
+    // audio:0 dondurur), sistem sesini yakalayabilen bir cihaz otomatik bulunup
+    // yayinlanir. Boylece kullanici ek ayar yapmaz; "sesi de paylas" kutusunu
+    // isaretlemek zorunda kalmaz.
+    if (wantsSystemAudio && !deviceId) {
+      // Ses izi hemen olusmayabilir; kisa bir bekleme ile kontrol edilir.
+      let sesIziVar = false;
+      for (let i = 0; i < 6; i++) {
+        sesIziVar = Boolean(pubFor(room?.localParticipant, lib.Track.Source.ScreenShareAudio)?.track);
+        if (sesIziVar) break;
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      if (!sesIziVar) {
+        const yedek = await sistemSesAygitiBul();
+        if (yedek) {
+          try {
+            await publishShareDevice(yedek.id);
+            emit({ shareAudioFallback: yedek.label });
+            shareAudioUyarildi = true;
+            onError('Sistem sesi otomatik yakalandı: ' + yedek.label);
+          } catch {
+            shareAudioUyarildi = true;
+            onError('Sistem sesi yakalanamadı. Ayarlardan ses kaynağını elle seç');
+          }
+        } else {
+          shareAudioUyarildi = true;
+          onError('Sistem sesi alınamadı: paylaşırken "Sekme" seç ve "Sesi de paylaş" kutusunu işaretle');
+        }
+      }
+    }
+
     // Telefonda ekran paylasimi yatay goruntuye uygun: kilidi dene. Yalnizca
     // paylasim basariyla acildiktan sonra yapilir; tarayici desteklemiyorsa
     // sessizce gecilir ve kullanici elle dondurebilir.
@@ -1498,11 +1812,117 @@ export async function toggleScreen(options = {}) {
     stopShareDeviceAudio();
     const message = String(error?.message || '');
     if (message.toLowerCase().includes('not supported') || message.toLowerCase().includes('getdisplaymedia')) {
-      onError('Bu cihaz ekran paylaşımını desteklemiyor (mobil tarayıcılar desteklemez)');
+      // Android Chrome getDisplayMedia DESTEKLER; iOS Safari desteklemez.
+      if (isTouch && /iPad|iPhone|iPod/.test(navigator.userAgent || '')) {
+        onError('iPhone/iPad ekran paylaşımını desteklemiyor (iOS kısıtı). Android veya bilgisayar kullan');
+      } else {
+        onError('Bu cihaz ekran paylaşımını desteklemiyor. Android Chrome kullan veya tarayıcıyı güncelle');
+      }
     } else if (!message.toLowerCase().includes('cancel')) {
       onError('Ekran paylaşımı başlatılamadı');
     }
   }
+}
+
+/// Varsayilan mikrofonun Voicemeeter gibi bir SANAL cikis olup olmadigini
+/// kontrol eder. Sanal cikislar mikrofon DEGILDIR; Chrome bunlardan ses
+/// alamaz (seviye 0) ve karsi taraf hicbir sey duymaz. Kullanici uyarilir.
+async function mikrofonSanalUyar() {
+  try {
+    const ds = await navigator.mediaDevices.enumerateDevices();
+    const varsayilan = ds.find((d) => d.kind === 'audioinput' && d.deviceId === 'default');
+    const etiket = varsayilan?.label || '';
+    if (/voicemeeter out|cable output|stereo mix|what u hear/i.test(etiket)) {
+      onError('Mikrofonun sessiz: varsayılan giriş "' + etiket + '" bir sanal çıkış. Ayarlardan gerçek mikrofonunu (ör. HyperX, webcam) seç');
+    }
+  } catch {}
+}
+
+/// Bir ses cihazindan kisa sureli ornek alip ses seviyesini olcer. Cihazda
+/// gercekten ses olup olmadigini anlamak icin kullanilir: Voicemeeter'da bus
+/// yonlendirmesi kapaliysa cihaz sessiz (0) doner ve bosuna yayin yapilmaz.
+async function sesSeviyesiOlc(deviceId, sure = 700) {
+  let stream = null;
+  let ctx = null;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        deviceId: { exact: deviceId },
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false
+      }
+    });
+    ctx = new AudioContext();
+    const src = ctx.createMediaStreamSource(stream);
+    const an = ctx.createAnalyser();
+    an.fftSize = 256;
+    src.connect(an);
+    await new Promise((r) => setTimeout(r, sure));
+    const data = new Uint8Array(an.frequencyBinCount);
+    an.getByteFrequencyData(data);
+    let toplam = 0;
+    let max = 0;
+    for (const v of data) {
+      toplam += v;
+      if (v > max) max = v;
+    }
+    return { ortalama: toplam / data.length, max };
+  } catch {
+    return null;
+  } finally {
+    try { stream?.getTracks().forEach((t) => t.stop()); } catch {}
+    try { ctx?.close(); } catch {}
+  }
+}
+
+/// Sistem sesini yakalayabilecek sanal bir kayit cihazi bulur. Voicemeeter
+/// kullanicilarinda varsayilan cikis sanal oldugu icin Chrome'un "sekme sesi"
+/// izi olusmaz; bu durumda Voicemeeter'in bus cikislari (Out A1..A5, B1..B3)
+/// veya VB-Cable / Stereo Mix gibi bir cihaz dogrudan kullanilir.
+///
+/// ONEMLI: Voicemeeter'da bir bus'a cikis cihazi atanmamis veya strip o bus'a
+/// yonlendirilmemisse o cikis SESSIZ doner. Bu yuzden adaylar sirayla olculur
+/// ve GERCEKTEN ses tasiyan ilk cihaz secilir; hicbiri ses tasimiyorsa en
+/// olasi aday (B2) yine de dondurulur ki kullanici ayarini duzeltebilsin.
+async function sistemSesAygitiBul() {
+  try {
+    const ds = await navigator.mediaDevices.enumerateDevices();
+    const girisler = ds.filter((d) => d.kind === 'audioinput');
+    // Oncelik sirasi: Voicemeeter bus cikislari (Chrome sesi buraya
+    // yonlendirilir), sonra VB-Cable, sonra Stereo Mix.
+    const oncelik = [
+      /voicemeeter out b2/i,
+      /voicemeeter out b1/i,
+      /voicemeeter out b3/i,
+      /voicemeeter out a1/i,
+      /voicemeeter out a2/i,
+      /cable output/i,
+      /stereo mix|stereomix|what u hear/i
+    ];
+    const adaylar = [];
+    for (const desen of oncelik) {
+      const bulunan = girisler.find((d) => desen.test(d.label || ''));
+      if (bulunan && !adaylar.some((a) => a.id === bulunan.deviceId)) {
+        adaylar.push({ id: bulunan.deviceId, label: bulunan.label });
+      }
+    }
+    if (!adaylar.length) return null;
+
+    // Adaylari sirayla olc; ses tasiyan ilkini sec.
+    let ilkSesli = null;
+    for (const aday of adaylar) {
+      const seviye = await sesSeviyesiOlc(aday.id);
+      if (seviye && seviye.max > 2) {
+        ilkSesli = aday;
+        break;
+      }
+    }
+    // Ses tasiyan bulunamadiysa en olasi adayi dondur (kullanici ayarini
+    // duzelttiginde calisir; sessizse zaten zarar vermez).
+    return ilkSesli || adaylar[0];
+  } catch {}
+  return null;
 }
 
 /// Secilen ses girdisini yakalayip EKRAN SESI olarak yayinlar. Boylece sistem
@@ -1770,6 +2190,10 @@ export async function stopCaptureCard() {
 /// Ekran sesi yakalanmadiysa kullaniciyi bilgilendirir. Ses yalnizca paylasim
 /// penceresindeki "sesi de paylas" kutusu isaretlendiginde gelir; sessiz kalirsa
 /// karsi taraf hicbir sey duymaz ve sebebi anlasilmaz.
+///
+/// Chrome sistem sesini YALNIZCA "Sekme" veya "Tum ekran" paylasiminda verir;
+/// "Pencere" secilirse ses izi hic olusmaz. Bu yuzden uyari metni kullaniciyi
+/// dogru secime yonlendirir.
 function reportScreenAudio() {
   const hasScreenAudio = () => {
     try {
@@ -1782,7 +2206,13 @@ function reportScreenAudio() {
   setTimeout(() => {
     if (!room?.localParticipant?.isScreenShareEnabled) return;
     if (hasScreenAudio()) return;
-    onError('Ekran paylaşılıyor ama ses gelmiyor: pencere seçerken "sesi de paylaş" kutusunu işaretle');
+    // Otomatik yakalama zaten bir uyari verdiyse tekrar uyarmayiz.
+    if (shareAudioUyarildi) return;
+    if (IS_EDGE) {
+      onError('Ekran paylaşılıyor ama ses gelmiyor: paylaşırken "Bu sekmeyi paylaş" seç ve "Sesi de paylaş" kutusunu işaretle (Edge pencere seçiminde ses vermez)');
+    } else {
+      onError('Ekran paylaşılıyor ama ses gelmiyor: paylaşırken "Sekme" veya "Tüm ekran" seç ve "Sesi de paylaş" kutusunu işaretle (Pencere seçiminde ses gelmez)');
+    }
   }, 1200);
 }
 
@@ -1796,6 +2226,10 @@ export function updateIdentity(name) {
 export async function leave() {
   if (!room) return;
   const id = channelId;
+  // Kullanici kendisi ayriliyor: Disconnected olayinda yeniden baglanma
+  // denenmesin, bekleyen zamanlayici iptal edilsin.
+  kapaniyor = true;
+  clearTimeout(yenidenBaglanmaZamanlayici);
   // Ekran kilidi ve medya bildirimi serbest birakilir.
   kilidiBirak();
   releaseWakeLock();
@@ -1834,4 +2268,62 @@ export async function leave() {
 
 export function isReconnecting() {
   return reconnecting;
+}
+
+export async function getPing() {
+  if (!room) return null;
+  try {
+    const pc = room.engine?.publisher?.pc || room.engine?.subscriber?.pc;
+    if (pc && typeof pc.getStats === 'function') {
+      const stats = await pc.getStats();
+      for (const report of stats.values()) {
+        if (report.type === 'candidate-pair' && report.nominated && typeof report.currentRoundTripTime === 'number') {
+          return Math.round(report.currentRoundTripTime * 1000);
+        }
+      }
+    }
+  } catch {}
+  if (room.engine?.client?.rtt && typeof room.engine.client.rtt === 'number') {
+    return Math.round(room.engine.client.rtt);
+  }
+  return null;
+}
+
+export async function yenile() {
+  if (!room) return false;
+  if (room.localParticipant?.isScreenShareEnabled) {
+    try {
+      const pub = pubFor(room.localParticipant, lib.Track.Source.ScreenShare);
+      if (pub?.track?.restartTrack) {
+        await pub.track.restartTrack();
+      }
+    } catch {}
+  }
+  if (room.localParticipant?.isCameraEnabled) {
+    try {
+      const pub = pubFor(room.localParticipant, lib.Track.Source.Camera);
+      if (pub?.track?.restartTrack) {
+        await pub.track.restartTrack();
+      }
+    } catch {}
+  }
+  try {
+    if (room.engine?.reconnect) {
+      await room.engine.reconnect();
+    }
+  } catch {
+    // Motor yeniden baglanamadi: join ile tam yeniden baglanma denenir.
+    // Bekleyen otomatik yeniden baglanma zamanlayicisi iptal edilir ki
+    // iki baglanma denemesi birbirine girmesin.
+    clearTimeout(yenidenBaglanmaZamanlayici);
+    yenidenBaglanmaSayaci = 0;
+    try {
+      await join({ channelId, send, onState, onError });
+    } catch {}
+  }
+  try {
+    await room.startAudio();
+  } catch {}
+  attachTracks();
+  return true;
 }

@@ -1,11 +1,13 @@
-# LiveKit SFU yapilandirmasi
+# LiveKit SFU yapilandirmasi — 7 kisilik grup gorusmesi icin
+# Sinyallesme 443 uzerinden Caddy ile ters vekil edilir (127.0.0.1:7880).
+# Medya dogrudan gider: UDP 7882 (tek port mux), TCP 7881 yedegi.
 #
 # ONEMLI — SURUM SARTI:
 #   advertise_internal_ip ve skip_external_ip_validation ayarlari livekit-server
-#   v1.13.0 ile gelmistir. v1.8.x bu alanlari TANIMAZ; yapilandirma reddedilir.
-#   Bu yuzden docker-compose.yml livekit/livekit-server:v1.13.6 imajini kullanir.
-#
-# {KEYS} yerine install.sh tarafindan uretilen anahtarlar yazilir.
+#   v1.13.0 ile gelmistir. v1.8.x bu alanlari TANIMAZ; yapilandirma reddedilir ve
+#   sunucu "field advertise_internal_ip not found in type config.RTCConfig"
+#   hatasiyla surekli yeniden baslar. Bu yuzden docker-compose.yml
+#   livekit/livekit-server:v1.13.6 imajini kullanir.
 
 port: 7880
 
@@ -13,19 +15,23 @@ rtc:
   tcp_port: 7881
   # Tek UDP portu: tum medya + TURN bu porttan gecer (router'da tek yonlendirme yeter)
   udp_port: 7882
-  # Genel IP STUN ile ogrenilir ve ICE adayi olarak duyurulur.
+  # Router arkasinda oldugumuz icin genel IP STUN ile ogrenilir ve ICE adayi olarak duyurulur
   use_external_ip: true
-  # Ev/yerel agdaki istemciler icin LAN adresi de duyurulur. Router'da NAT dongusu
-  # (hairpin) yoksa yerel cihazlar genel IP'ye ulasamaz; bu ayar olmadan LAN
-  # istemcileri sesli kanala baglanamaz. Dis istemciler genel IP'yi kullanir.
+  # Ev agindaki istemciler icin LAN adresi de duyurulur. Router'da NAT dongusu
+  # (hairpin) olmadigi icin ev WiFi'sindeki cihazlar genel IP'ye ulasamaz; bu ayar
+  # olmadan LAN istemcileri sesli kanala baglanamaz. Dis istemciler genel IP'yi kullanir.
   advertise_internal_ip: true
+  # Router NAT dongusunu desteklemedigi icin SFU kendi genel IP'sine ulasamaz;
+  # bu kontrol atlanmazsa "failed to get external ip" uyarisi olusur.
   skip_external_ip_validation: true
   # Medya icin guvenli olmayan rastgele portlara ihtiyac kalmasin
   enable_loopback_candidate: false
 
+# Anahtarlar install.sh tarafindan uretilir, buraya yazilir
 keys:
-{KEYS}
+  __API_KEY__: __API_SECRET__
 
+# Istemci tarafi kalite/bant kontrolu
 audio:
   # Ses icin aktif konusan kisiyi onceliklendir
   active_level: 35
@@ -39,4 +45,19 @@ logging:
 room:
   # Bos oda 2 dakika sonra kapanir: gereksiz kaynak harcamaz
   empty_timeout: 120
-  max_participants: 20
+  # 7 kisilik grup icin ust sinir
+  max_participants: 12
+
+turn:
+  enabled: true
+  # TURN/UDP: simetrik NAT arkasindaki kullanicilar icin hayat kurtarici
+  udp_port: 3478
+  # TURN/TLS 443'te olmali normalde ama ters vekil ile cakisir; UDP yeterli
+  relay_range_start: 35000
+  relay_range_end: 35020
+
+webhook:
+  # Sesli kanal katilimci durumunu sunucuya bildirir (kim konusuyor / kamera acik mi)
+  urls:
+    - http://127.0.0.1:__APP_PORT__/api/rtc/webhook
+  api_key: __API_KEY__

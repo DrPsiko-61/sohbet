@@ -1,19 +1,43 @@
-# Caddy ters vekil (reverse proxy) sablonu — HTTPS ve tek alan adi uzerinden
-# hem uygulama hem LiveKit sinyallesmesi sunulur.
-#
-# install.sh, DOMAIN degiskeni verildiginde bu dosyayi uretir:
-#   {DOMAIN} -> gercek alan adi (or. sohbet.ornek.com)
-#   {PORT}   -> Node uygulamasinin portu (or. 3300)
-#
-# Yerel agdaki cihazlar icin /livekit yolu 127.0.0.1:7880'e yonlendirilir;
-# boylece NAT dongusu olmayan router'larda da yerel istemciler baglanabilir.
+{
+	email __EMAIL__
+	# 80 portu CasaOS tarafindan kullanildigi icin HTTP yonlendirmesi ve HTTP-01 kapatildi.
+	# Sertifika yalnizca 443 uzerinden TLS-ALPN-01 ile alinir.
+	auto_https disable_redirects
+	servers {
+		protocols h1 h2
+	}
+}
 
-{DOMAIN} {
-	encode gzip
+# ---------- Uygulama ----------
+__APP_DOMAIN__ {
+	tls {
+		issuer acme {
+			disable_http_challenge
+		}
+	}
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		-Server
+	}
+	reverse_proxy 127.0.0.1:__APP_PORT__ {
+		header_up X-Real-IP {remote_host}
+		flush_interval -1
+	}
+}
 
-	# LiveKit sinyallesmesi (WebSocket)
-	reverse_proxy /livekit* 127.0.0.1:7880
-
-	# Uygulama
-	reverse_proxy 127.0.0.1:{PORT}
+# ---------- LiveKit (ses / video / ekran) ----------
+__LIVE_DOMAIN__ {
+	tls {
+		issuer acme {
+			disable_http_challenge
+		}
+	}
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:7880 {
+		header_up X-Real-IP {remote_host}
+		flush_interval -1
+	}
 }

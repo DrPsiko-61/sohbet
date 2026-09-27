@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#12131a">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex">
+<meta name="description" content="Sohbet uygulamasını telefona veya bilgisayara indir ve kur">
+<title>Sohbet — Uygulamayı indir</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<style>
+:root{
+  --bg:#0d0e14; --bg2:#12131a; --bg3:#1a1c25; --bg4:#232633;
+  --line:#2a2e3d; --fg:#e6e8ef; --muted:#8b90a4;
+  --brand:#5865f2; --ok:#3ba55d; --warn:#faa61a;
+  --r:10px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:radial-gradient(1200px 600px at 50% -10%,#1c2140 0%,var(--bg) 60%);
+  color:var(--fg); min-height:100vh;
+  font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  padding:32px 20px 64px;
+  display:flex; justify-content:center;
+}
+.wrap{width:100%; max-width:720px}
+.brand{display:flex; align-items:center; gap:12px; margin-bottom:28px}
+.brand svg{flex:0 0 auto}
+.brand b{font-size:20px; letter-spacing:.2px}
+.card{
+  background:var(--bg2); border:1px solid var(--line);
+  border-radius:16px; padding:28px;
+}
+h1{margin:0 0 8px; font-size:26px; line-height:1.25}
+.lead{margin:0 0 24px; color:var(--muted)}
+.dl{
+  display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  background:var(--bg3); border:1px solid var(--line);
+  border-radius:14px; padding:18px; margin-bottom:8px;
+}
+.dl .meta{flex:1 1 200px; min-width:0}
+.dl .meta strong{display:block; font-size:15px}
+.dl .meta small{color:var(--muted)}
+.btn{
+  display:inline-flex; align-items:center; gap:10px;
+  background:var(--brand); color:#fff; text-decoration:none;
+  border:none; border-radius:var(--r); padding:14px 22px;
+  font-size:16px; font-weight:600; cursor:pointer;
+  min-height:48px; transition:filter .15s, transform .05s;
+}
+.btn:hover{filter:brightness(1.12)}
+.btn:active{transform:translateY(1px)}
+.btn svg{flex:0 0 auto}
+.note{color:var(--muted); font-size:13px; margin:0 0 28px}
+h2{font-size:17px; margin:0 0 12px}
+h3{font-size:15px; margin:22px 0 10px}
+ol{margin:0 0 28px; padding-left:22px}
+ol li{margin-bottom:10px}
+ol li b{color:#fff}
+.warn{
+  background:rgba(250,166,26,.08); border:1px solid rgba(250,166,26,.35);
+  border-radius:var(--r); padding:14px 16px; margin:0 0 28px;
+}
+.warn h3{margin:0 0 8px; font-size:15px; color:var(--warn)}
+.warn p{margin:0 0 8px; font-size:14px}
+.warn p:last-child{margin:0}
+code{
+  background:var(--bg4); border:1px solid var(--line); border-radius:6px;
+  padding:2px 7px; font:13px/1.4 ui-monospace,Consolas,monospace;
+  overflow-wrap:anywhere;
+}
+.grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin-bottom:28px}
+.mini{background:var(--bg3); border:1px solid var(--line); border-radius:var(--r); padding:14px}
+.mini strong{display:block; font-size:14px; margin-bottom:4px}
+.mini span{color:var(--muted); font-size:13px}
+footer{color:var(--muted); font-size:13px; text-align:center; margin-top:24px}
+a.plain{color:#8ea1ff}
+@media (max-width:560px){
+  body{padding:20px 14px 48px}
+  .card{padding:20px}
+  .btn{width:100%; justify-content:center}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="brand">
+    <svg viewBox="0 0 48 48" width="38" height="38" aria-hidden="true"><path d="M10 6h28a6 6 0 0 1 6 6v16a6 6 0 0 1-6 6H22l-9 8v-8h-3a6 6 0 0 1-6-6V12a6 6 0 0 1 6-6Z" fill="#5865f2"/><circle cx="17" cy="20" r="3" fill="#fff"/><circle cx="24" cy="20" r="3" fill="#fff"/><circle cx="31" cy="20" r="3" fill="#fff"/></svg>
+    <b>Sohbet</b>
+  </div>
+
+  <div class="card">
+    <h1>Sohbet'i indir</h1>
+    <p class="lead">Kurmak istediğin cihazı seç. Tek dosya indir, aç, bitti — ayar yapman gerekmez, program sunucu adresini kendi ayarlar.</p>
+
+    <h2>Bilgisayar (Windows)</h2>
+    <div class="dl">
+      <div class="meta">
+        <strong>Sohbet-Kurulum.exe</strong>
+        <small>Sürüm 1.1.0 &middot; 27 KB &middot; Windows 10 / 11 (64-bit)</small>
+      </div>
+      <a class="btn" href="/Sohbet-Kurulum.exe" download="Sohbet-Kurulum.exe">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 11l5 5 5-5"/><path d="M4 20h16"/></svg>
+        İndir
+      </a>
+    </div>
+    <p class="note">İndirme başlamazsa: <a class="plain" href="/Sohbet-Kurulum.exe" download="Sohbet-Kurulum.exe">Sohbet-Kurulum.exe</a> bağlantısına sağ tıkla → <b>Bağlantıyı farklı kaydet</b>.</p>
+
+    <h3>Kurulum (3 adım)</h3>
+    <ol>
+      <li>İndirdiğin <b>Sohbet-Kurulum.exe</b> dosyasına <b>çift tıkla</b>.</li>
+      <li>Windows "Bilgisayarınızı koruduk" uyarısı çıkarsa <b>Ek bilgi</b> → <b>Yine de çalıştır</b> seç.</li>
+      <li>Kurulum saniyeler içinde biter ve uygulama <b>kendiliğinden açılır</b>. Masaüstünde ve Başlat menüsünde <b>Sohbet</b> kısayolu oluşur.</li>
+    </ol>
+
+    <div class="warn">
+      <h3>"Windows bilgisayarınızı korudu" uyarısı neden çıkıyor?</h3>
+      <p>Programın dijital imzası (kod imzalama sertifikası) yok, bu yüzden Windows ilk çalıştırmada temkinli davranır. Dosya kendi sunucumuzdan gelir.</p>
+      <p>Devam etmek için: <b>Ek bilgi</b> → <b>Yine de çalıştır</b>. Bu uyarı yalnızca ilk kurulumda görünür.</p>
+    </div>
+
+    <h2>Android telefon</h2>
+    <div class="dl">
+      <div class="meta">
+        <strong>Sohbet.apk</strong>
+        <small>Sürüm 1.0.0 &middot; 21 KB &middot; Android 8.0 ve üzeri</small>
+      </div>
+      <a class="btn" href="/Sohbet.apk" download="Sohbet.apk">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 11l5 5 5-5"/><path d="M4 20h16"/></svg>
+        İndir
+      </a>
+    </div>
+    <p class="note">İndirme başlamazsa: <a class="plain" href="/Sohbet.apk" download="Sohbet.apk">Sohbet.apk</a> bağlantısına uzun bas → <b>Bağlantıyı indir</b>. Dosya telefonun <b>İndirilenler</b> klasörüne iner.</p>
+
+    <div class="warn">
+      <h3>Daha önce kurduğun test sürümü varsa önce onu kaldır</h3>
+      <p>Bu paket artık kalıcı imza anahtarıyla imzalanıyor. Telefonda eski (test) sürüm yüklüyse yeni sürüm onun üzerine kurulamaz; <b>Ayarlar → Uygulamalar → Sohbet → Kaldır</b> deyip sonra bu dosyayı kur.</p>
+    </div>
+
+    <h3>Kurulum (4 adım)</h3>
+    <ol>
+      <li>İndirdiğin <b>Sohbet.apk</b> dosyasına dokun (Bildirimler'den ya da <b>Dosyalar → İndirilenler</b>'den).</li>
+      <li>Android <b>"Bilinmeyen uygulamalar"</b> izni isterse: <b>Ayarlar</b> → <b>Bu kaynağa izin ver</b> (tarayıcı veya Dosyalar uygulaması için).</li>
+      <li>Google Play Protect <b>"Yine de yükle"</b> derse, onayla. (Play Protect, Play Store dışından kurulan her uygulama için bu uyarıyı gösterebilir; dosya kendi sunucumuzdan gelir.)</li>
+      <li>Kurulum bitince <b>Aç</b>'a dokun. Uygulama açılır ve giriş ekranı gelir.</li>
+    </ol>
+
+    <div class="warn">
+      <h3>Play Protect uyarısı neden çıkıyor?</h3>
+      <p>Uygulama Play Store'da yayınlanmadığı için Android onu tanımaz ve bilinmeyen kaynak uyarısı verir. Paket geçerli bir yayın anahtarıyla imzalanmıştır, hata ayıklama sürümü değildir.</p>
+      <p>Kurulumdan sonra uyarı bir daha çıkmaz. Rahatsız ediyorsa Play Store → profil → Play Protect → dişli simgesi → taramayı kapatabilirsin.</p>
+    </div>
+
+    <h2>Telefonda kurulumdan sonra</h2>
+    <div class="grid">
+      <div class="mini"><strong>İzinler</strong><span>Sesli kanala ilk girdiğinde mikrofon izni, kamerayı ilk açtığında kamera izni sorulur. İkisinde de <b>İzin ver</b> seç.</span></div>
+      <div class="mini"><strong>Arka planda ses</strong><span>Sesli kanaldayken bildirim çubuğunda <b>"Sesli sohbet açık"</b> bildirimi görünür. Bu bildirim sayesinde ekran kapalıyken de ses kesilmez.</span></div>
+      <div class="mini"><strong>Güncelleme</strong><span>Aynı bağlantıdan yeni sürümü indirip kurabilirsin; ayarların ve oturumun korunur.</span></div>
+      <div class="mini"><strong>Kaldırma</strong><span>Ayarlar → Uygulamalar → <b>Sohbet</b> → Kaldır.</span></div>
+    </div>
+
+    <h2>Bilgisayarda kurulumdan sonra</h2>
+    <div class="grid">
+      <div class="mini"><strong>Açtıktan sonra</strong><span>Tarayıcı penceresi açılır ve doğrudan giriş ekranı gelir. Hesabın yoksa "Hesabın yok mu? Kayıt ol" ile davet kodu girerek kayıt ol.</span></div>
+      <div class="mini"><strong>Oturumun hatırlanır</strong><span>Bir kez giriş yapman yeterli. Program güncellense veya yeniden kurulsa bile oturumun ve mesajların silinmez.</span></div>
+      <div class="mini"><strong>Kısayollar</strong><span>Masaüstünde ve Başlat menüsünde <b>Sohbet</b> kısayolu oluşur. Program ikinci kez açılırsa yeni pencere açılmaz, mevcut pencere öne gelir.</span></div>
+      <div class="mini"><strong>Kaldırma</strong><span>Ayarlar → Uygulamalar → <b>Sohbet</b> → Kaldır. Ya da kurulum klasöründeki <code>Sohbet.exe --kaldir</code>.</span></div>
+    </div>
+
+    <h2>Sistem gereksinimleri</h2>
+    <ul style="margin:0 0 8px; padding-left:22px; color:var(--muted); font-size:14px">
+      <li><b>Bilgisayar:</b> Windows 10 veya Windows 11 (64-bit)</li>
+      <li><b>Telefon:</b> Android 8.0 (sürüm 26) veya daha yeni bir Android</li>
+    </ul>
+    <h3>Bilgisayar (ayrıntı)</h3>
+    <ul style="margin:0 0 8px; padding-left:22px; color:var(--muted); font-size:14px">
+      <li>Yönetici yetkisi <b>gerekmez</b> — kurulum kullanıcı klasörüne yapılır</li>
+      <li>Kurulum yeri: <code>%LOCALAPPDATA%\Sohbet\Sohbet.exe</code></li>
+      <li>Ayarları değiştirmek istersen: <code>%LOCALAPPDATA%\Sohbet\ayarlar.txt</code> içindeki <code>sunucu=</code>, <code>canli=</code>, <code>yerel_ip=</code> satırlarını düzenle</li>
+    </ul>
+  </div>
+
+  <footer>
+    Sohbet &middot; özel grup sohbeti &middot; <a class="plain" href="/">tarayıcıdan aç</a>
+  </footer>
+
+</div>
+</body>
+</html>
