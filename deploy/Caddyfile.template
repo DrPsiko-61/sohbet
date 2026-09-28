@@ -2,10 +2,8 @@
 	email __EMAIL__
 	# Port 80 artik serbest (CasaOS kaldirildi): HTTP->HTTPS yonlendirmesi
 	# ve Let's Encrypt HTTP-01 dogrulamasi yeniden acildi.
-	# HTTP/2 uzerinden WebSocket upgrade (RFC 8441) ana Caddy'de
-	# upstream'e dogru aktarilamiyor -> 502. Tum siteler HTTP/1.1 kullaniyor.
 	servers {
-		protocols h1
+		protocols h1 h2
 	}
 }
 
@@ -47,7 +45,10 @@ __LIVE_DOMAIN__ {
 # adresine baglanir. Sertifika Caddy'nin yerel yetkilisinden alinir ve mobil
 # uygulamaya tanitilir. LiveKit ayni adres uzerinden /livekit yolu ile sunulur.
 https://__LAN_IP__ {
-	tls internal
+	tls {
+		issuer internal {
+		}
+	}
 	encode zstd gzip
 	header {
 		X-Content-Type-Options "nosniff"
@@ -64,22 +65,5 @@ https://__LAN_IP__ {
 			header_up X-Real-IP {remote_host}
 			flush_interval -1
 		}
-	}
-}
-
-# ---------- Stoat (__STOAT_DOMAIN__) ----------
-# Stoat kendi Caddy'si ile 127.0.0.1:8880 uzerinde HTTP olarak calisir.
-# Bu blok internetten gelen istekleri Stoat'a yonlendirir ve Let's Encrypt
-# ile gercek (guvenilir) TLS sertifikasi alir.
-# LiveKit RTC: 7891/tcp + 50200-50300/udp (router'da yonlendirilmeli).
-__STOAT_DOMAIN__ {
-	# index.html ve JS bundle'i onbelleklenmesin: Stoat'in VITE_* degerleri
-	# degistiginde tarayici eski bundle'i kullanmasin.
-	@nocache path / /index.html /stoat.json /.well-known/stoat
-	header @nocache Cache-Control "no-store, no-cache, must-revalidate"
-	header @nocache Pragma "no-cache"
-	reverse_proxy 127.0.0.1:8880 {
-		header_up X-Real-IP {remote_host}
-		flush_interval -1
 	}
 }
