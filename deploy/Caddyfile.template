@@ -73,6 +73,11 @@ https://__LAN_IP__ {
 # ile gercek (guvenilir) TLS sertifikasi alir.
 # LiveKit RTC: 7891/tcp + 50200-50300/udp (router'da yonlendirilmeli).
 __STOAT_DOMAIN__ {
+	# index.html ve JS bundle'i onbelleklenmesin: Stoat'in VITE_* degerleri
+	# degistiginde tarayici eski bundle'i kullanmasin.
+	@nocache path / /index.html /stoat.json /.well-known/stoat
+	header @nocache Cache-Control "no-store, no-cache, must-revalidate"
+	header @nocache Pragma "no-cache"
 	reverse_proxy 127.0.0.1:8880 {
 		header_up X-Real-IP {remote_host}
 		flush_interval -1
