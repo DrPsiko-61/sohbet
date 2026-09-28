@@ -1,10 +1,11 @@
 {
 	email __EMAIL__
-	# 80 portu CasaOS tarafindan kullanildigi icin HTTP yonlendirmesi ve HTTP-01 kapatildi.
-	# Sertifika yalnizca 443 uzerinden TLS-ALPN-01 ile alinir.
-	auto_https disable_redirects
+	# Port 80 artik serbest (CasaOS kaldirildi): HTTP->HTTPS yonlendirmesi
+	# ve Let's Encrypt HTTP-01 dogrulamasi yeniden acildi.
+	# HTTP/2 uzerinden WebSocket upgrade (RFC 8441) ana Caddy'de
+	# upstream'e dogru aktarilamiyor -> 502. Tum siteler HTTP/1.1 kullaniyor.
 	servers {
-		protocols h1 h2
+		protocols h1
 	}
 }
 
@@ -12,7 +13,6 @@
 __APP_DOMAIN__ {
 	tls {
 		issuer acme {
-			disable_http_challenge
 		}
 	}
 	encode zstd gzip
@@ -32,11 +32,48 @@ __APP_DOMAIN__ {
 __LIVE_DOMAIN__ {
 	tls {
 		issuer acme {
-			disable_http_challenge
 		}
 	}
 	encode zstd gzip
 	reverse_proxy 127.0.0.1:7880 {
+		header_up X-Real-IP {remote_host}
+		flush_interval -1
+	}
+}
+
+# ---------- LAN erisimi ----------
+# Ev agindaki cihazlar icin. Router NAT dongusunu (hairpin) desteklemedigi icin
+# LAN'dan public alan adina ulasilamiyor; cihazlar dogrudan sunucunun yerel
+# adresine baglanir. Sertifika Caddy'nin yerel yetkilisinden alinir ve mobil
+# uygulamaya tanitilir. LiveKit ayni adres uzerinden /livekit yolu ile sunulur.
+https://__LAN_IP__ {
+	tls internal
+	encode zstd gzip
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		-Server
+	}
+	handle_path /livekit/* {
+		reverse_proxy 127.0.0.1:7880 {
+			flush_interval -1
+		}
+	}
+	handle {
+		reverse_proxy 127.0.0.1:__APP_PORT__ {
+			header_up X-Real-IP {remote_host}
+			flush_interval -1
+		}
+	}
+}
+
+# ---------- Stoat (__STOAT_DOMAIN__) ----------
+# Stoat kendi Caddy'si ile 127.0.0.1:8880 uzerinde HTTP olarak calisir.
+# Bu blok internetten gelen istekleri Stoat'a yonlendirir ve Let's Encrypt
+# ile gercek (guvenilir) TLS sertifikasi alir.
+# LiveKit RTC: 7891/tcp + 50200-50300/udp (router'da yonlendirilmeli).
+__STOAT_DOMAIN__ {
+	reverse_proxy 127.0.0.1:8880 {
 		header_up X-Real-IP {remote_host}
 		flush_interval -1
 	}
